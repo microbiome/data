@@ -5,14 +5,16 @@ library(mia)
 ### Defining FILE PATHS ###
 
 ## Biom file (taxonomic profiles)
-url_to_biom <- url("https://github.com/microbiome/data/Tengeler2020/Aggregated_humanization2.biom")
+url_to_biom <- url("https://github.com/microbiome/data/raw/main/Tengeler2020/Aggregated_humanization2.biom")
 ## Sample phenodata
-url_to_sample_meta <- url("https://github.com/microbiome/data/Tengeler2020/Mapping_file_ADHD_aggregated.csv")
+url_to_sample_meta <- url("https://github.com/microbiome/data/raw/main/Tengeler2020/Mapping_file_ADHD_aggregated.csv")
 ## Phylogenetic tree
-url_to_tree <- url("https://github.com/microbiome/data/Tengeler2020/Data_humanization_phylo_aggregation.tre")
+url_to_tree <- url("https://github.com/microbiome/data/raw/main/Tengeler2020/Data_humanization_phylo_aggregation.tre")
 
 
 ### TSE from BIOM ###
+
+makeTreeSEFromBiom(url)
 
 # Import the data into SummarizedExperiment container
 se <- loadFromBiom(url_to_biom)

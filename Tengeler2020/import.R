@@ -14,28 +14,16 @@ url_to_tree <- url("https://github.com/microbiome/data/raw/main/Tengeler2020/Dat
 
 ### TSE from BIOM ###
 
-makeTreeSEFromBiom(url)
+# Read Biom from url
+biom_obj <- biomformat::read_biom(url_to_biom)
 
-# Import the data into SummarizedExperiment container
-se <- loadFromBiom(url_to_biom)
-
-# Convert this data to TreeSE container (no direct importer exists)
-tse <- as(se, "TreeSummarizedExperiment")
-
-# We notice that the rowData fields do not have descriptibve names.
-# Hence, let us rename the columns in rowData
-names(rowData(tse)) <- c("Kingdom", "Phylum", "Class",
-                         "Order", "Family", "Genus")
-
-# We also notice that the taxa names are of form "c__Bacteroidia" etc.
-# Goes through the whole DataFrame. Removes '.*[kpcofg]__' from strings, where [kpcofg] 
-# is any character from listed ones, and .* any character.
-rowdata_modified <- BiocParallel::bplapply(rowData(tse), 
-                                           FUN = stringr::str_remove, 
-                                           pattern = '.*[kpcofg]__')
+# Convert Biom to TreeSE
+tse <- makeTreeSEFromBiom(biom_obj,
+                          removeTaxaPrefixes = TRUE,
+                          rankFromPrefix = TRUE)
 
 # Genus level has additional '\"', so let's delete that also
-rowdata_modified <- BiocParallel::bplapply(rowdata_modified, 
+rowdata_modified <- BiocParallel::bplapply(rowData(tse), 
                                            FUN = stringr::str_remove, 
                                            pattern = '\"')
 

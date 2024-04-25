@@ -3,6 +3,9 @@
 This folder includes data downloaded from the following paper
 https://www.nature.com/articles/s41467-023-36633-7
 
+The data files are stored in gzipped format in the data/ subfolder
+
+
 And these URL sources:
  
 1) Sample metadata
@@ -24,3 +27,6 @@ SGB_info.taxonomy.tsv
 
 6) rowData for ARG info 
 ARG_family_info.tsv
+
+7) Country-level data. Country-level antibiotic usage rate statistics from CDDEP and WHO. - citation for CDDEP = ResistanceMap 2019: Antibiotic resistance. The Center for Disease, Dynamics Economics & Policy. Accessed: 30-07-2019 (2019). Citation for WHO = WHO report on surveillance of antibiotic consumption: 2016-2018 early implementation. Geneva: World Health Organization (2018).
+country_AMU_data.tsv

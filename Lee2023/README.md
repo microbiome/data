@@ -1,10 +1,23 @@
 18.4.2024 Chouaib & Leo
 
+
+## Code
+
+make_TreeSE.R creates TSE object
+- NAs have been replaced with zeroes
+- zero variance rows and cols have been removed
+
+analysis.R contains scripts to replicate analyses in the original
+publication (Lee et al., 2023, see below). This is to be finalized.
+
+## Data
+
 This folder includes data downloaded from the following paper
+
+Lee et al. (2023):
 https://www.nature.com/articles/s41467-023-36633-7
 
 The data files are stored in gzipped format in the data/ subfolder
-
 
 And these URL sources:
  

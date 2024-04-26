@@ -5,7 +5,7 @@
 
 Clone / copy this folder.
 
-unzip the data/ files
+unzip the data.zip
 
 make_TreeSE.R creates TSE object
 - NAs have been replaced with zeroes

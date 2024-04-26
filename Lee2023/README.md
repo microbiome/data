@@ -3,7 +3,9 @@
 
 ## Code
 
-Clone / copy this folder.
+Clone / copy 
+- data.zip
+- make_TreeSE.R
 
 unzip the data.zip
 

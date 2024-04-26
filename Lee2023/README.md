@@ -3,9 +3,15 @@
 
 ## Code
 
+Clone / copy this folder.
+
+unzip the data/ files
+
 make_TreeSE.R creates TSE object
 - NAs have been replaced with zeroes
 - zero variance rows and cols have been removed
+
+
 
 analysis.R contains scripts to replicate analyses in the original
 publication (Lee et al., 2023, see below). This is to be finalized.

@@ -1,9 +1,18 @@
 18.4.2024 Chouaib & Leo
 
 
-## Code
+## Using the TreeSummarizedExperiment R data object
 
-Clone / copy 
+Just download Lee2023.rds
+
+This contains the data in a readily processed format.
+
+## Constructing the TreeSummarizedExperiment R data obhect
+
+In order to create the Lee2023.rds data yourself, you can do the
+following.
+
+Download these files:
 - data.zip
 - make_TreeSE.R
 
@@ -14,8 +23,9 @@ make_TreeSE.R creates TSE object
 - zero variance rows and cols have been removed
 
 
+## Misc
 
-analysis.R contains scripts to replicate analyses in the original
+analysis.R contains additional, unfinished scripts to replicate analyses in the original
 publication (Lee et al., 2023, see below). This is to be finalized.
 
 ## Data

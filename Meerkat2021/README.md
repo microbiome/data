@@ -20,6 +20,11 @@ For additional details, raw data, and code, please refer to the original zenodo 
 
 [Original data and code for Diurnal oscillations in gut bacterial load and composition](https://zenodo.org/records/5337076)
 
+## License
+
+This dataset is licensed under the Creative Commons Attribution 4.0 International License (CC-BY 4.0).
+See https://creativecommons.org/licenses/by/4.0/ for details.
+
 ### References 
 
 - Alice Risely, Kerstin Wilhelm, Marta B. Manser, Tim Clutton-Brock, & Simone Sommer. (2021). Data and code for: Diurnal oscillations in gut bacterial load and composition eclipse seasonal and lifetime dynamics in wild meerkats, Suricata suricatta (Version 1.0) [Data set]. Zenodo. https://doi.org/10.5281/zenodo.5337076

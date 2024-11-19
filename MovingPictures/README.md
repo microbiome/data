@@ -25,6 +25,16 @@ using [mia](https://microbiome.github.io/mia/) tools.
 
 -   The raw data for this dataset is available in the associated [GitHub repository](https://github.com/twbattaglia/MicrobeDS/tree/master/data-raw/MovingPictures)
 
+## License
+
+Creative Commons Zero (CC0) Public Domain Dedication
+
+The dataset is dedicated to the public domain under the Creative Commons Zero (CC0) License.
+To the extent possible under law, the contributor has waived all copyright and related or neighboring rights to this dataset.
+
+You can copy, modify, distribute and perform the work, even for commercial purposes, without asking permission.
+For more information, visit: https://creativecommons.org/publicdomain/zero/1.0/
+
 #### References
 
 Caporaso et al. (2009). Genome Biol. 2011;12(5)

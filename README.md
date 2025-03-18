@@ -1,5 +1,26 @@
-# Training microbiome datasets
+18.3.2025
 
-This repository contains the raw data from which some of the [mia datasets](https://microbiome.github.io/mia/reference/mia-datasets.html) can be constructed. The files stored here are mainly used for training on how to construct TreeSummarizedExperiment (TreeSE) as well as MultiAssayExperiment (MAE) containers from raw data. While the mia datasets can be simply imported in R with `data("dataset_name", package = "mia")`, this exercise is relevant to understand how TreeSE containers are constructed and also how your own experimental microbiome data can be shaped into one such container.
 
-To construct TreeSE / MAE containers for a specific dataset, go to the subdirectory named after the dataset of interest and download only the `import.R` script which resides there. If you then run this script locally, it will construct the TreeSE / MAE from the raw data stored in that repository. It is encouraged to read through the `import.R` script and try to understand its logic, so that you can build the toolkit you will need to convert your own data into a similar container. Even if every contructor script will have to accomodate the unique characteristics of the given raw files, understanding this logic will help you build a constructor for other raw data as well.
+## Using the TreeSummarizedExperiment R data object
+
+Just download TSE_filtered.rds
+
+This contains the data in a readily processed format.
+
+# Demo Dataset for TreeSummarizedExperiment
+
+## Overview
+This repository contains a cleaned and publicly shareable demo dataset.
+It includes a TreeSummarizedExperiment (TSE) object representing the gender study subset of the Global AMR data.
+
+## Contents
+- `tse_AMRdemo.rds` – The full TreeSummarizedExperiment object in R’s native `.rds` format.
+
+## How to Use
+To load the dataset in R:
+```r
+# Load the TSE object
+tse <- readRDS("tse_AMRdemo.rds")
+
+# Check the structure of the dataset
+tse

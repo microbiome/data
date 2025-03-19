@@ -13,6 +13,7 @@ This contains the data in a readily processed format.
 - Title: Gender differences in global antimicrobial resistance
 - Authors: Mahkameh Salehi, Ville Laitinen, Shivang Bhanushali, Johan Bengtsson-Palme, Peter Collignon, John J Beggs, Katariina Pärnänen, Leo Lahti
 - Description: This dataset contains antimicrobial resistance (AMR) data in a TreeSummarizedExperiment (TSE) format. The dataset has been processed to facilitate further analyses of AMR patterns, particularly in relation to gender differences on a global scale.
+- [DOI: https://doi.org/10.5281/zenodo.14909582](https://doi.org/10.5281/zenodo.14909582)
 
 ## Contents
 - `tse_AMRdemo.rds` – The full TreeSummarizedExperiment object in R’s native `.rds` format.

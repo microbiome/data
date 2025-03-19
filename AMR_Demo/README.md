@@ -3,7 +3,7 @@
 
 ## Using the TreeSummarizedExperiment R data object
 
-Just download TSE_filtered.rds
+Just download tse_AMRdemo.rds
 
 This contains the data in a readily processed format.
 

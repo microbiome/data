@@ -1,4 +1,4 @@
-18.3.2025
+19.3.2025
 
 
 ## Using the TreeSummarizedExperiment R data object
@@ -9,9 +9,10 @@ This contains the data in a readily processed format.
 
 # Demo Dataset for TreeSummarizedExperiment
 
-## Overview
-This repository contains a cleaned and publicly shareable demo dataset.
-It includes a TreeSummarizedExperiment (TSE) object representing the gender study subset of the Global AMR data.
+## Study Information
+- Title: Gender differences in global antimicrobial resistance
+- Authors: Mahkameh Salehi, Ville Laitinen, Shivang Bhanushali, Johan Bengtsson-Palme, Peter Collignon, John J Beggs, Katariina Pärnänen, Leo Lahti
+- Description: This dataset contains antimicrobial resistance (AMR) data in a TreeSummarizedExperiment (TSE) format. The dataset has been processed to facilitate further analyses of AMR patterns, particularly in relation to gender differences on a global scale.
 
 ## Contents
 - `tse_AMRdemo.rds` – The full TreeSummarizedExperiment object in R’s native `.rds` format.

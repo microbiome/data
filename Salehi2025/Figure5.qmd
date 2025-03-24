@@ -1,0 +1,450 @@
+---
+title: "Figure5 Data Processing and Visualization"
+format: html
+editor: visual
+---
+
+# Indroduction
+
+This document contains the data processing, analysis, and visualization steps for reproducing Figure 5. The statistical models used in this analysis were precomputed in a separate Quarto document (Figure5models.qmd). It can be found from [GitHub](https://github.com/microbiome/data/blob/main/Salehi2025). This separation ensures that model fitting, which is computationally intensive, does not need to be rerun every time the report is generated.
+
+Let's load all the necessary libraries for data processing, modeling, and visualization.
+
+```{r setup, include=FALSE}
+library(scater)
+library(ggpubr)
+library(rstatix)
+library(viridis)
+library(ggsignif)
+library(Matrix)
+library(RColorBrewer)
+library(caret)
+library(randomForest)
+library(xgboost)
+library(brms)
+library(glmnet)
+library(tidyverse)
+library(vegan)
+library(TreeSummarizedExperiment)
+```
+
+The dataset used in this analysis, tse_AMRdemo.rds, is available in the [GitHub repository](https://github.com/microbiome/data/blob/main/Salehi2025/tse_AMRdemo.rds)
+
+```{r}
+# Load TSE object
+tse <- tse_AMRdemo
+```
+
+# Data processing
+
+Now we filter out samples with missing gender or age information, extracts relevant metadata, computes total read counts per sample, and applies a log-transformation to the ARG load variable. These steps prepare the dataset for downstream analysis and modeling.
+
+```{r, Readcount}
+# Filter samples with complete gender and age data
+non_na_samples <- !is.na(colData(tse)$gender) & !is.na(colData(tse)$host_age_years)
+TSE_filtered <- tse[, non_na_samples]
+
+# Extract metadata
+adult_metadata <- as.data.frame(colData(TSE_filtered))
+
+# Readcount
+counts_mat <- assay(TSE_filtered, "counts")
+adult_metadata$readcount_2 <- colSums(counts_mat)
+
+adult_metadata$log_ARG_load <- log(adult_metadata$ARG_load)
+```
+
+This section extracts ARG class information for each gene, reshapes the count matrix to long format, and computes total counts for each antibiotic class per sample. Only the top 5 most common AB classes are retained for further analysis.
+
+```{r, AB classes}
+# Extract count matrix and metadata
+counts_mat <- assay(tse, "counts")
+row_df <- as.data.frame(rowData(tse))  # Gene annotations
+col_df <- as.data.frame(colData(tse)) %>% mutate(sample = acc)  # Sample metadata
+
+# Set sample names as column names
+colnames(counts_mat) <- col_df$acc 
+
+# Merge gene-level counts with their corresponding antibiotic resistance class
+counts_df <- as.data.frame(counts_mat) %>%
+  mutate(gene = rownames(counts_mat)) %>%
+  left_join(row_df[, c("GENE", "Class")], by = c("gene" = "GENE")) %>%
+  pivot_longer(cols = -c(gene, Class), names_to = "sample", values_to = "count")
+
+# Aggregate counts at sample and antibiotic class level
+agg_counts <- counts_df %>%
+  group_by(sample, Class) %>%
+  summarize(class_total = sum(count, na.rm = TRUE), .groups = "drop")
+
+# Keep only the top 5 most frequent antibiotic classes
+top_5_AB_classes <- c(
+  "Tetracycline", 
+  "Beta-lactam", 
+  "Macrolide, Lincosamide, Streptogramin B", 
+  "Aminoglycoside", 
+  "Amphenicol"
+)
+
+agg_counts <- agg_counts %>% filter(Class %in% top_5_AB_classes)
+```
+
+This section prepares AB class count data for modeling by: 1. Adding a small pseudocount to avoid log(0) 2. Converting long format to wide (samples x AB classes) 3. Merging with metadata 4. Applying log transformation to the top 5 AB classes
+
+```{r, pseudocount}
+# Add pseudocount to avoid log(0)
+agg_counts$class_total <- ifelse(agg_counts$class_total == 0,
+                                 min(agg_counts$class_total[agg_counts$class_total != 0]),
+                                 agg_counts$class_total)
+
+# Reshape data: one row per sample, columns = AB classes
+agg_counts_wide <- agg_counts %>%
+  spread(key = "Class", value = "class_total")
+
+# Filter only samples that exist in metadata
+agg_counts_wide <- agg_counts_wide %>%
+  filter(sample %in% adult_metadata$acc)
+
+# Merge wide-format AB class counts with metadata
+adult_metadata <- full_join(adult_metadata %>% mutate(sample = acc),
+                            agg_counts_wide, 
+                            by = "sample")
+
+# Log-transform the top 5 antibiotic class counts
+top5_log <- adult_metadata[, top_5_AB_classes] %>% log
+
+# Rename columns to indicate log-transformed values
+colnames(top5_log) <- paste0("log_", gsub(" ", "_", colnames(top5_log)))
+
+# Add log-transformed AB class values to metadata
+adult_metadata <- cbind(adult_metadata, top5_log)
+```
+
+This section prepares the data for beta diversity analysis and computes Shannon diversity index from relative abundance profiles.
+
+```{r, Beta Diversity}
+# Filter metadata to include only samples with GDP and antibiotic usage information
+adult_metadata <- adult_metadata %>%
+  mutate(
+    continent = factor(geo_loc_name_country_continent_calc)
+  ) %>%
+  filter(!is.na(Usage), !is.na(GDP_per_head))
+
+# Keep only samples with non-missing GDP and antibiotic usage in the TSE object
+non_na_conditions <- !is.na(colData(TSE_filtered)$GDP_per_head) &
+                     !is.na(colData(TSE_filtered)$Usage)
+TSE_adult_filtered <- TSE_filtered[, non_na_conditions]
+
+# Update the sample metadata in the filtered TSE object
+colData(TSE_adult_filtered) <- DataFrame(adult_metadata)
+
+# Extract relative abundance data
+assay_data_clean <- assay(TSE_adult_filtered, "relabundance")
+
+# Remove samples that contain only zero abundances
+non_empty_samples <- colSums(assay_data_clean > 0, na.rm = TRUE) > 0
+assay_data_clean <- assay_data_clean[, non_empty_samples]
+
+# Subset metadata to match samples with non-zero data
+adult_metadata <- colData(TSE_adult_filtered)[non_empty_samples, ]
+
+# Calculate Shannon diversity for each sample (based on species richness and evenness)
+adult_metadata$shannon_diversity <- diversity(t(assay_data_clean), index = "shannon")
+```
+
+This section creates dummy variables (one-hot encoding) for categorical predictors to be used in the GLM and Bayesian regression models. Included predictors: - gender (as numeric) - age category - continent - GDP per head - antibiotic usage
+
+```{r, Dummy-encoding}
+# Copy metadata to a temporary dataframe
+temp_df <- adult_metadata
+
+# Set the correct factor level order for age categories
+temp_df$age_category <- factor(temp_df$age_category,
+                               levels = c("Middle-Aged Adult", "Infant",
+                                          "Toddler", "Children", "Teenager",
+                                          "Young Adult", "Older Adult", "Oldest Adult"))
+
+# Create binary variable: High income (1) vs. other (0)
+temp_df$income_group_HIC <- ifelse(temp_df$World_Bank_Income_Group == "High income", 1, 0)
+
+# Create binary variable for antibiotic usage: high (1) vs. low (0)
+temp_df$Usage_high <- ifelse(temp_df$Usage < 10, 0, 1)
+
+# Convert gender to binary numeric variable: Men = 0, Women = 1
+temp_df$sex_num_Men <- ifelse(temp_df$gender == "Men", 0, 1)
+
+# Perform dummy (one-hot) encoding for selected predictors
+temp_df_one_hot <- model.matrix(~ 0 + 
+                                  sex_num_Men +
+                                  continent + 
+                                  age_category + 
+                                  income_group_HIC + 
+                                  Usage_high,
+                                data = temp_df) %>%
+  as.data.frame()
+
+# Clean column names by replacing spaces and dashes with underscores
+colnames(temp_df_one_hot) <- gsub(" |-", "_", colnames(temp_df_one_hot))
+
+# Store the dummy variable names for later model specification
+dummy_var_names <- colnames(temp_df_one_hot)
+
+# Combine dummy variables with original metadata
+adult_metadata <- cbind(adult_metadata, temp_df_one_hot)
+
+# Clean up temporary dataframes
+rm(temp_df, temp_df_one_hot)
+```
+
+This section defines utility functions used later in the analysis for formatting results and interpreting significance.
+
+```{r, helpers}
+## Helpers
+
+# Format numbers: Convert values below 0.001 to "<0.001"
+to_neat <- function(x, threshold = 0.001) {
+  ifelse(x > threshold, as.character(x), "<0.001")
+}
+
+# Assign significance stars for confidence intervals (log-scale)
+get_stars_CI_log <- function(lower, upper) {
+  ifelse(lower > 1 | upper < 1, "*", "ns")
+}
+
+# Assign significance stars for confidence intervals (linear scale)
+get_stars_CI <- function(lower, upper) {
+  ifelse(lower > 0 | upper < 0, "*", "ns")
+}
+```
+
+# Modeling
+
+First, we define the response variables (ARG_load, shannon_diversity) and income groups (LMIC, HIC) used for stratified statistical modeling.
+
+```{r}
+responses <- c("ARG_load", "shannon_diversity")
+incomes <- 0:1
+set.seed(123123)
+```
+
+This section describes four variants of Bayesian regression models. Each model was run separately for two outcomes: ARG load and Shannon diversity, and for two income groups: HIC (High-Income Countries) and LMIC (Low- and Middle-Income Countries).
+
+Model Variants:
+
+1.  Model 1 (Reference): Fixed effects only. No adjustment for bioproject or sequencing depth.
+
+2.  Model 2: Includes a random intercept for bioproject to account for between-study variability.
+
+3.  Model 3: Adds log-transformed sequencing depth log(readcount) as a covariate.
+
+4.  Model 4: Combines both: a random intercept for bioproject and sequencing depth as a covariate.
+
+Note:
+
+Model fitting is computationally intensive and is therefore performed separately in an external Quarto document, please run that script before the next code chunk: (Figure5models.qmd).
+
+The resulting model objects are saved as `.rds` files (e.g. `fit1.rds`, `fit2.rds`, etc.) and loaded back into the this Quarto document for result summarization and plotting.
+
+```{r, models}
+# Load models
+fit_list1 <- readRDS("fit1.rds")
+fit_list2 <- readRDS("fit2.rds")
+fit_list3 <- readRDS("fit3.rds")
+fit_list4 <- readRDS("fit4.rds")
+
+
+# Results model 1
+full_summary1 <- lapply(responses, function(r) {
+  lapply(incomes, function(ic) {
+    
+    my_summary <- posterior_summary(fit_list1[[r]][[ic+1]])
+    # Extract effect only
+    my_summary <- my_summary[grep("^b_", rownames(my_summary)), ]
+    
+    my_summary <- my_summary %>% 
+      data.frame() %>% 
+      rownames_to_column(var = "Feature") %>% 
+      mutate(Feature = gsub("b_", "", Feature), 
+             Response = r) %>% 
+      dplyr::select(-Est.Error) %>% 
+      mutate(Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE), 
+             # Sex = sex,
+             income_group = ifelse(ic == 1, "HIC", "LMIC"))
+    
+    return(my_summary)
+    
+  }) %>% 
+    do.call(rbind,. )
+}) %>% 
+  do.call(rbind,. ) %>% 
+  mutate(model = 1)
+
+
+
+# Results model 2
+full_summary2 <- lapply(responses, function(r) {
+  lapply(incomes, function(ic) {
+    
+    my_summary <- posterior_summary(fit_list2[[r]][[ic+1]])
+    
+    # Extract effect only
+    my_summary <- my_summary[grep("^b_", rownames(my_summary)), ] %>%
+      as.data.frame() %>%
+      rownames_to_column(var = "Feature") %>%
+      mutate(Feature = gsub("b_", "", Feature),
+             Response = r,
+             Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE),
+             income_group = ifelse(ic == 1, "HIC", "LMIC")) %>%
+      dplyr::select(-Est.Error)
+    
+    return(my_summary)
+  }) %>% do.call(rbind, .)
+}) %>% do.call(rbind, .) %>%
+  mutate(model = 2)
+
+
+# Results model 3
+full_summary3 <- lapply(responses, function(r) {
+  lapply(incomes, function(ic) {
+    
+    my_summary <- posterior_summary(fit_list3[[r]][[ic+1]])
+    
+    # Extract effect only
+    my_summary <- my_summary[grep("^b_", rownames(my_summary)), ] %>%
+      as.data.frame() %>%
+      rownames_to_column(var = "Feature") %>%
+      mutate(Feature = gsub("b_", "", Feature),
+             Response = r,
+             Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE),
+             income_group = ifelse(ic == 1, "HIC", "LMIC")) %>%
+      dplyr::select(-Est.Error)
+    
+    return(my_summary)
+  }) %>% do.call(rbind, .)
+}) %>% do.call(rbind, .) %>%
+  mutate(model = 3)
+
+
+# Results model 4
+full_summary4 <- lapply(responses, function(r) {
+  lapply(incomes, function(ic) {
+    
+    my_summary <- posterior_summary(fit_list4[[r]][[ic+1]])
+    
+    # Extract effect only
+    my_summary <- my_summary[grep("^b_", rownames(my_summary)), ] %>%
+      as.data.frame() %>%
+      rownames_to_column(var = "Feature") %>%
+      mutate(Feature = gsub("b_", "", Feature),
+             Response = r,
+             Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE),
+             income_group = ifelse(ic == 1, "HIC", "LMIC")) %>%
+      dplyr::select(-Est.Error)
+    
+    return(my_summary)
+  }) %>% do.call(rbind, .)
+}) %>% do.call(rbind, .) %>%
+  mutate(model = 4)
+
+```
+
+# Combining results
+
+In this section, we combine the outputs from the four statistical models into a single summary table.
+
+```{r, combine}
+# Combine results from all models
+## Full summary
+full_summary <- list(full_summary1, 
+                     full_summary2, 
+                     full_summary3, 
+                     full_summary4) %>% 
+  do.call(rbind, .)
+
+# Recode model identifier
+full_summary <- full_summary %>%
+  mutate(model = recode(as.character(model),
+                        "1" = "original", 
+                        "2" = "+(1|bioproject)", 
+                        "3" = "+log(readcount)", 
+                        "4" = "+(1|bioproject)+log(readcount)"),
+         model = factor(model, 
+                        levels = c("original", 
+                                   "+(1|bioproject)", 
+                                   "+log(readcount)", 
+                                   "+(1|bioproject)+log(readcount)")))
+
+# Clean and format feature names
+full_summary <- full_summary %>%
+  mutate(Feature = gsub("continent", "", Feature),
+         Feature = gsub("age_category", "", Feature),
+         Feature = gsub("Usage_high", "High Antibiotic Use", Feature),
+         Feature = gsub("sex_num_Men", "Woman", Feature),
+         Feature = gsub("_", " ", Feature),
+         Feature = gsub("logreadcount", "log(read count)", Feature),
+         Response = gsub("ARG_load", "ARG load", Response),
+         Response = gsub("shannon_diversity", "Shannon", Response))
+
+# Reorder and rename columns
+full_summary <- full_summary %>%
+  select(Predictor = Feature,
+         Estimate, Q2.5, Q97.5,
+         Response,
+         `Income Group` = income_group, 
+         model)
+
+# Compute exponentiated estimates
+full_summary <- full_summary %>%
+  mutate(`exp(Estimate)` = exp(Estimate),
+         `exp(Q2.5)` = exp(Q2.5),
+         `exp(Q97.5)` = exp(Q97.5))
+
+# Define factor levels for Predictor variable
+full_summary$Predictor <- factor(full_summary$Predictor,
+                                 levels = c("log(read count)", "South America", "Oceania", "North America", 
+                                            "Europe", "Asia",
+                                            "Oldest Adult", "Older Adult",
+                                            "Young Adult", "Teenager",
+                                            "Children", "Toddler", "Infant",
+                                            "High Antibiotic Use", 
+                                            "Woman", 
+                                            "Intercept"))
+
+# Rename model column
+full_summary <- full_summary %>% rename(Model = model)
+
+# Rename model 1
+full_summary <- full_summary %>%
+  mutate(Model = recode(Model, "original" = "Reference"))
+```
+
+# Plotting
+
+This section generates Figure 5, which visualizes the effect sizes (with 95% credible intervals) of selected predictors on two outcome variables (Shannon diversity and ARG load (log-transformed)).
+
+```{r}
+# Figure5
+p <- full_summary %>% 
+  filter(Model == levels(full_summary$Model)[1]) %>%
+  mutate(lower = (exp(Q2.5) - 1)*100,
+         upper = (exp(Q97.5) - 1)*100, 
+         mean = (exp(Estimate) - 1)*100) %>%
+  filter(Predictor != "Intercept") %>% 
+  ggplot() + 
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper, color = Response),
+                position = position_dodge(width = 0.5), width = 0.4, linewidth = 1.5) +
+  geom_point(aes(x = Predictor, y = (exp(Estimate) - 1)*100,
+                 color = Response),
+             position = position_dodge(width = 0.5),
+             # shape = 1,
+             size = 2) +
+  facet_wrap(~`Income Group`) +
+  coord_flip() +
+  labs(y = "Effect Size (%)", x = "") +
+  scale_color_manual(values = c("#1f77b4", "#ff7f0e")) +
+  facet_wrap(~`Income Group`, ncol = 2) + 
+  theme_bw(25) + 
+  theme(strip.background =element_rect(fill="white"))
+
+p
+```

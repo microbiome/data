@@ -17,6 +17,8 @@ This contains the data in a readily processed format.
 
 ## Contents
 - `tse_AMRdemo.rds` – The full TreeSummarizedExperiment object in R’s native `.rds` format.
+- `Figure5.qmd` – A Quarto document that performs data processing and generates Figure 5 from the manuscript.
+- `Figure5models.qmd` – A separate Quarto script for fitting the statistical models used in the figure (runs slower).
 
 ## How to Use
 To load the dataset in R:

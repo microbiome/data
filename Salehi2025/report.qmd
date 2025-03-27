@@ -77,7 +77,7 @@ Model fitting is computationally intensive and has been performed in a separate 
 # This step is slow and only needs to be run once.
 # It fits the models and automatically saves them as .rds files (fit1.rds, fit2.rds, etc.).
 # After the first run, you can skip this and load the models directly.
-# source("model.R")
+source("model.R")
 
 ```
 

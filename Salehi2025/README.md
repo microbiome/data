@@ -22,6 +22,14 @@ This repository contains a cleaned demo dataset (`tse_AMRdemo.rds`) and supporti
 
 -   `model.R` – Runs the Bayesian models for the manuscript (slow, runs brms).
 
+-   `ComparisonModels.R` – Comparison of log-normal and log-transformed normal models.
+
+-   `StratifiedModel.R` – Stratified model fitting by subgroups such as age and gender.
+
+-   `HierarchicalModel.R` – Hierarchical model with nested random effects.
+
+-   `FrequentistCompare.R` – Simulation-based comparison of Bayesian and frequentist models for ARG and Shannon.
+
 -   `report.qmd` – Quarto document that loads precomputed model results and generates Figure 5.
 
 -    `main.R` – Wrapper script to execute all of the above in correct order.
@@ -42,12 +50,16 @@ To reproduce the analysis and generate Figure 5 from the manuscript:
 
 1.  [Download all necessary files](https://github.com/microbiome/data/blob/main/Salehi2025) from the repository:
 
-    -   `tse_AMRdemo.rds`
-    -   `data.R`
-    -   `funcs.R`
-    -   `model.R`
-    -   `report.qmd`
-    -   `main.R`
+   - `tse_AMRdemo.rds`
+    - `data.R`
+    - `funcs.R`
+    - `model.R`
+    - `ComparisonModels.R`
+    - `StratifiedModel.R`
+    - `HierarchicalModel.R`
+    - `FrequentistCompare.R`
+    - `report.qmd`
+    - `main.R`
 
 2.  Open R or RStudio in the same directory where these files are located.
 

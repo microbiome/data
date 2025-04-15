@@ -50,7 +50,7 @@ To reproduce the analysis and generate Figure 5 from the manuscript:
 
 1.  [Download all necessary files](https://github.com/microbiome/data/blob/main/Salehi2025) from the repository:
 
-   - `tse_AMRdemo.rds`
+    - `tse_AMRdemo.rds`
     - `data.R`
     - `funcs.R`
     - `model.R`

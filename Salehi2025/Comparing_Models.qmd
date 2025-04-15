@@ -1,0 +1,100 @@
+---
+title: "Comparing Models"
+format: html
+editor: visual
+---
+
+# Introduction
+
+In this analysis, we aim to compare two different statistical modeling approaches for handling skewed data: the log-normal distribution model and the normal distribution model applied to log-transformed data.
+
+1. **Log-Normal Model**: This model assumes that the data follows a log-normal distribution, which is appropriate when the data is positively skewed. A log-normal distribution is often used when modeling non-negative data with a right-skewed distribution, as it models the logarithm of the data as normally distributed.
+
+2. **Normal Model on Log-transformed Data**: In this approach, we first apply a log-transformation to the original data (log(x)) and then model the transformed data using a normal distribution. This approach is commonly used when data exhibits skewness, and it can help normalize the data for more effective modeling using a Gaussian distribution.
+
+The dataset (`tse_AMRdemo.rds`) used in this analysis, as well as all the above scripts, can be found in the [GitHub](https://github.com/microbiome/data/blob/main/Salehi2025). This separation ensures that model fitting, which is computationally intensive, does not need to be rerun every time the report is generated.
+
+Let's load all the necessary libraries.
+
+
+# Data processing
+
+All preprocessing steps including filtering samples, extracting metadata, calculating resistance class abundances, and computing diversity metrics are implemented in a separate R script (`data.R`). Please ensure that this script is located in your working directory or adjust the path accordingly.
+
+# Utility functions
+
+All helper functions such as formatting numbers and assigning significance indicators are implemented in a separate R script (`funcs.R`). Please ensure that this script is available in your working directory.
+
+
+
+# Modeling
+
+
+
+# Comparison of Log-normal and Log-transformed Normal Models
+
+In this analysis, we aim to compare two different statistical modeling approaches for handling skewed data: the log-normal distribution model and the normal distribution model applied to log-transformed data.
+
+1. **Log-Normal Model**: This model assumes that the data follows a log-normal distribution, which is appropriate when the data is positively skewed. A log-normal distribution is often used when modeling non-negative data with a right-skewed distribution, as it models the logarithm of the data as normally distributed.
+
+2. **Normal Model on Log-transformed Data**: In this approach, we first apply a log-transformation to the original data (log(x)) and then model the transformed data using a normal distribution. This approach is commonly used when data exhibits skewness, and it can help normalize the data for more effective modeling using a Gaussian distribution.
+
+
+## Data splitting
+
+In order to evaluate the performance of both models, we split the data into two subsets: a training set used to train the models, and a test set used to evaluate the models' predictive performance (80% training, 20% test).
+
+```{r}
+# Split the data into a training set and a test set (80% training, 20% test)
+set.seed(123123)
+train_indices <- sample(seq_len(nrow(adult_metadata)), size = 0.8 * nrow(adult_metadata))
+
+train_data <- adult_metadata[train_indices, ]
+test_data <- adult_metadata[-train_indices, ]
+```
+
+
+
+## Model fitting
+
+Model fitting is computationally intensive and has been performed in a separate R script (`modelcomparison.R`). Please ensure that this script is available in your working directory.
+
+The resulting model objects are saved as .rds files for each model (e.g., `fit_ARG_lognormal.rds`, `fit_ARG_gaussian.rds`). These files are then loaded into this document to allow downstream summarization and visualization without re-running the computationally intensive model fitting.
+
+The models are then loaded using the following R code:
+
+```{r, include=FALSE}
+# Load the models
+fit_ARG_lognormal <- readRDS("fit_ARG_lognormal.rds")
+fit_ARG_gaussian <- readRDS("fit_ARG_gaussian.rds")
+```
+
+
+## Leave-One-Out Cross-Validation for Log-normal and Gaussian Models
+
+In this section, we perform Leave-One-Out Cross-Validation (LOO CV) for both the log-normal and Gaussian models. LOO CV is a method where one data point is left out of the training set at a time, and the model is trained on the remaining data. The model's performance is then tested on the left-out point, and the error is recorded. This is repeated for all points in the test dataset.
+
+1. Data Splitting: 
+   - For each iteration, one observation from the test data is removed (`test_data_out`), and the remaining data is used to train the model (`test_data_loo`).
+   
+2. Model Prediction: 
+   - The trained model makes a prediction for the left-out observation.
+   
+3. Error Calculation:
+   - The Mean Squared Error (MSE) is calculated for both the log-normal model and the Gaussian model (applied to the log-transformed data). 
+
+4. Storing Results: 
+   - The MSE for each model is stored in a list (`loo_results`), and the results are printed after all iterations are completed.
+
+
+```{r, LOO}
+# Calculate the average MSE for both models
+mean_loo_lognormal <- mean(loo_results_lognormal)
+mean_loo_gaussian <- mean(loo_results_gaussian)
+
+# Print the average MSE for both models
+cat("Average Log-normal LOO MSE:", mean_loo_lognormal, "\n")
+cat("Average Gaussian LOO MSE:", mean_loo_gaussian, "\n")
+
+```
+

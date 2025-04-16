@@ -18,6 +18,10 @@ library(tidyverse)
 library(vegan)
 library(TreeSummarizedExperiment)
 library(dplyr)
+library(loo)
+library(cmdstanr)
+library(broom)
+library(tibble)
 
 # Load TSE object
 tse <- readRDS("tse_AMRdemo.rds")
@@ -178,3 +182,13 @@ adult_metadata <- cbind(adult_metadata, temp_df_one_hot)
 # Clean up temporary dataframes
 rm(temp_df, temp_df_one_hot)
 
+
+# Create a balanced subset to make the hierarchical model faster to fit
+# We sample 20 observations per group defined by income group, gender, and age category
+subset_data <- as.data.frame(adult_metadata) %>%
+  group_by(age_category, gender) %>%
+  group_modify(~ slice_sample(.x, n = min(20, nrow(.x)))) %>%
+  ungroup()
+
+# Set "Middle-Aged Adult" as the reference category for age
+subset_data$age_category <- relevel(factor(subset_data$age_category), ref = "Middle-Aged Adult")

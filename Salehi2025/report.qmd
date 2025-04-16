@@ -1,12 +1,12 @@
 ---
-title: "Figure5 Data Processing and Visualization"
+title: "Data Processing and Visualization for the Global AMR Gender Study"
 format: html
 editor: visual
 ---
 
 # Introduction
 
-This document contains the analysis and visualization steps for reproducing Figure 5.
+This document contains the analysis and visualization steps for reproducing Figure 5 (Model 1), along with visualizations for the other model variants.
 
 All required preprocessing and model fitting steps are executed via a wrapper script called `main.R`. This script sources the following R scripts in the correct order:
 
@@ -16,13 +16,20 @@ All required preprocessing and model fitting steps are executed via a wrapper sc
 
 -   `model.R` – statistical model fitting (computationally intensive)
 
+- `ComparisonModels.R` – comparison of log-normal vs. log-transformed normal models (computationally intensive)
+
+- `StratifiedModel.R` – stratified model fitting by subgroups such as income group and gender (computationally intensive)
+
+- `HierarchicalModel.R` – hierarchical modeling with nested random effects (computationally intensive)
+
+- `FrequentistCompare.R` – simulation-based comparison of Bayesian and frequentist models (computationally intensive)
+
 Before rendering this report, ensure that all these scripts are available in your working directory. To render this report and run all required scripts, make sure to execute script `main.R`.
 
 The dataset (`tse_AMRdemo.rds`) used in this analysis, as well as all the above scripts, can be found in the [GitHub](https://github.com/microbiome/data/blob/main/Salehi2025). This separation ensures that model fitting, which is computationally intensive, does not need to be rerun every time the report is generated.
 
-Let's load all the necessary libraries.
-
 ```{r setup, include=FALSE}
+# Load all the necessary libraries
 library(scater)
 library(ggpubr)
 library(rstatix)
@@ -39,6 +46,10 @@ library(tidyverse)
 library(vegan)
 library(TreeSummarizedExperiment)
 library(dplyr)
+library(loo)
+library(cmdstanr)
+library(broom)
+library(tibble)
 ```
 
 # Data processing
@@ -55,24 +66,75 @@ This section summarizes the results from four Bayesian regression model variants
 
 ### Model Variants:
 
-1.  **Model 1 (Reference):** Fixed effects only; no adjustment for bioproject or sequencing depth.
+1.  **Model 1 (Reference):** Fixed effects only (no adjustment for bioproject or sequencing depth):
 
-2.  **Model 2:** Adds a random intercept for `bioproject` to account for study-level variation.
+    $$
+    y_i \sim \mathcal{D}(\mu_i), \quad \mu_i = \beta_0 + \mathbf{X}_i \boldsymbol{\beta}
+    $$
 
-3.  **Model 3:** Adds log-transformed sequencing depth `log(readcount)` as a covariate.
+2.  **Model 2:** Adds a random intercept for `bioproject` to account for study-level variability:
 
-4.  **Model 4:** Includes both a random intercept for `bioproject` and `log(readcount)` as a covariate.
+    $$
+    y_i \sim \mathcal{D}(\mu_i), \quad \mu_i = \beta_0 + \mathbf{X}_i \boldsymbol{\beta} + b_{\text{project}[i]}
+    $$
+
+3.  **Model 3:** Includes sequencing depth as a covariate (log-transformed total read count):
+
+    $$
+    y_i \sim \mathcal{D}(\mu_i), \quad \mu_i = \beta_0 + \mathbf{X}_i \boldsymbol{\beta} + \beta_{\text{depth}} \cdot \log(\text{readcount}_i)
+    $$
+
+4.  **Model 4:** Combines both random intercept and sequencing depth:
+
+    $$
+    y_i \sim \mathcal{D}(\mu_i), \quad \mu_i = \beta_0 + \mathbf{X}_i \boldsymbol{\beta} + \beta_{\text{depth}} \cdot \log(\text{readcount}_i) + b_{\text{project}[i]}
+    $$
+
+Where:
+
+-   $y_i$ is the outcome (either ARG load or Shannon diversity),
+-   $\mathcal{D}$ is the distribution (log-normal for ARG load, Gaussian for Shannon),
+-   $\mathbf{X}_i$ are the dummy-encoded covariates (e.g., gender, age group, region, antibiotic use, etc.),
+-   $\boldsymbol{\beta}$: vector of fixed effect coefficients,
+-   $b_{\text{project}[i]}$ is the random intercept for bioproject.
 
 Model fitting is computationally intensive and has been performed in a separate R script (`model.R`). Please ensure that this script is available in your working directory.
 
-The resulting model objects are saved as `.rds` files (e.g., `fit1.rds`, `fit2.rds`, etc.). These files are then loaded into this document to allow downstream summarization and visualization without re-running the computationally intensive model fitting:
+The resulting model objects are saved as `.rds` files for each model (e.g., `fit1_ARG_load.rds`, `fit1_shannon_diversity.rds`, etc.). These files are then loaded into this document to allow downstream summarization and visualization without re-running the computationally intensive model fitting.
 
-```{r, load_models}
+The models are then combined into respective lists (`fit_list1`, `fit_list2`, `fit_list3`, and `fit_list4`) for easier manipulation and analysis in subsequent steps.
+
+```{r, load_models, include=FALSE}
 # Load models
-fit_list1 <- readRDS("fit1.rds")
-fit_list2 <- readRDS("fit2.rds")
-fit_list3 <- readRDS("fit3.rds")
-fit_list4 <- readRDS("fit4.rds")
+fit1_ARG_load <- readRDS("fit1_ARG_load.rds")
+fit1_shannon_diversity <- readRDS("fit1_shannon_diversity.rds")
+fit2_ARG_load <- readRDS("fit2_ARG_load.rds")
+fit2_shannon_diversity <- readRDS("fit2_shannon_diversity.rds")
+fit3_ARG_load <- readRDS("fit3_ARG_load.rds")
+fit3_shannon_diversity <- readRDS("fit3_shannon_diversity.rds")
+fit4_ARG_load <- readRDS("fit4_ARG_load.rds")
+fit4_shannon_diversity <- readRDS("fit4_shannon_diversity.rds")
+
+# Combine models into respective lists
+fit_list1 <- list(
+  fit1_ARG_load = fit1_ARG_load,
+  fit1_shannon_diversity = fit1_shannon_diversity
+)
+
+fit_list2 <- list(
+  fit2_ARG_load = fit2_ARG_load,
+  fit2_shannon_diversity = fit2_shannon_diversity
+)
+
+fit_list3 <- list(
+  fit3_ARG_load = fit3_ARG_load,
+  fit3_shannon_diversity = fit3_shannon_diversity
+)
+
+fit_list4 <- list(
+  fit4_ARG_load = fit4_ARG_load,
+  fit4_shannon_diversity = fit4_shannon_diversity
+)
 ```
 
 Then, we define the response variables (ARG_load, shannon_diversity) and income groups (LMIC, HIC) used for stratified statistical modeling.
@@ -92,21 +154,20 @@ For each of the 4 model variants, we extract posterior estimates (mean and 95% c
 For each model, we extract coefficient estimates, 95% credible intervals, and compute whether the effect is statistically significant.
 
 ```{r, models}
-
 # Results from Model 1: Fixed effects only (Reference)
-full_summary1 <- lapply(responses, function(r) {
+full_summary1 <- lapply(names(fit_list1), function(r) {  
   lapply(incomes, function(ic) {
     
-    # Extract posterior summaries for fixed effects
+    # Extract posterior summaries for fixed effects (only coefficients for fixed effects)
     my_summary <- posterior_summary(fit_list1[[r]][[ic+1]]) %>%
       .[grep("^b_", rownames(.)), ] %>%
       as.data.frame() %>%
       rownames_to_column(var = "Feature") %>%
       mutate(
         Feature = gsub("b_", "", Feature),
-        Response = r,
+        Response = gsub("^fit[0-9]+_", "", r),
         income_group = ifelse(ic == 1, "HIC", "LMIC"),
-        Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE)
+        Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE)  
       ) %>%
       dplyr::select(-Est.Error)
     
@@ -116,7 +177,7 @@ full_summary1 <- lapply(responses, function(r) {
 
 
 # Results from Model 2: + Random intercept for bioproject
-full_summary2 <- lapply(responses, function(r) {
+full_summary2 <- lapply(names(fit_list2), function(r) {
   lapply(incomes, function(ic) {
     
     # Posterior summaries including adjustment for study-level random effects
@@ -126,7 +187,7 @@ full_summary2 <- lapply(responses, function(r) {
       rownames_to_column(var = "Feature") %>%
       mutate(
         Feature = gsub("b_", "", Feature),
-        Response = r,
+        Response = gsub("^fit[0-9]+_", "", r),
         income_group = ifelse(ic == 1, "HIC", "LMIC"),
         Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE)
       ) %>%
@@ -138,7 +199,7 @@ full_summary2 <- lapply(responses, function(r) {
 
 
 # Results from Model 3: + log(readcount) as covariate
-full_summary3 <- lapply(responses, function(r) {
+full_summary3 <- lapply(names(fit_list3), function(r) {
   lapply(incomes, function(ic) {
     
     # Posterior summaries including adjustment for sequencing depth
@@ -148,7 +209,7 @@ full_summary3 <- lapply(responses, function(r) {
       rownames_to_column(var = "Feature") %>%
       mutate(
         Feature = gsub("b_", "", Feature),
-        Response = r,
+        Response = gsub("^fit[0-9]+_", "", r),
         income_group = ifelse(ic == 1, "HIC", "LMIC"),
         Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE)
       ) %>%
@@ -160,7 +221,7 @@ full_summary3 <- lapply(responses, function(r) {
 
 
 # Results from Model 4: + log(readcount) + (1 | bioproject)
-full_summary4 <- lapply(responses, function(r) {
+full_summary4 <- lapply(names(fit_list4), function(r) {
   lapply(incomes, function(ic) {
     
     # Posterior summaries including both sequencing depth and study-level random effect
@@ -170,7 +231,7 @@ full_summary4 <- lapply(responses, function(r) {
       rownames_to_column(var = "Feature") %>%
       mutate(
         Feature = gsub("b_", "", Feature),
-        Response = r,
+        Response = gsub("^fit[0-9]+_", "", r),
         income_group = ifelse(ic == 1, "HIC", "LMIC"),
         Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE)
       ) %>%
@@ -259,13 +320,31 @@ full_summary <- full_summary %>%
   mutate(Model = recode(Model, "original" = "Reference"))
 ```
 
-# Plotting
+# Model Results
 
-This section generates Figure 5, which visualizes the effect sizes (with 95% credible intervals) of selected predictors on two outcome variables (Shannon diversity and ARG load (log-transformed)).
+In this section, detailed results are presented for each of the four Bayesian regression models introduced earlier. For every model, we provide both a summary table of posterior estimates and a corresponding plot visualizing the effect sizes and 95% credible intervals for each predictor. Results are shown separately for the two outcome variables (ARG load and Shannon diversity) and stratified by income group (HIC and LMIC). A combined comparison plot is included at the end to facilitate visual comparison across models.
+
+## Model 1: Fixed Effects Only
 
 ```{r}
-# Figure5
-p <- full_summary %>% 
+# Filter Model 1 results from full_summary
+model1_summary <- full_summary %>%
+  filter(Model == "Reference") %>%
+  mutate(
+    lower = (exp(Q2.5) - 1) * 100,
+    upper = (exp(Q97.5) - 1) * 100,
+    mean = (exp(Estimate) - 1) * 100,
+    Significant = Q2.5 > 0 | Q97.5 < 0
+  ) %>%
+  filter(Predictor != "Intercept")
+
+# Summary table
+model1_summary %>%
+  dplyr::select(Predictor, Response, `Income Group`, Estimate, Q2.5, Q97.5, Significant) %>%
+  knitr::kable(digits = 3, caption = "Posterior summaries for Model 1 (Fixed Effects Only)")
+
+# Plot model 1
+p1 <- full_summary %>% 
   filter(Model == levels(full_summary$Model)[1]) %>%
   mutate(lower = (exp(Q2.5) - 1)*100,
          upper = (exp(Q97.5) - 1)*100, 
@@ -274,19 +353,760 @@ p <- full_summary %>%
   ggplot() + 
   geom_hline(yintercept = 0, linetype = "dashed") +
   geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper, color = Response),
-                position = position_dodge(width = 0.5), width = 0.4, linewidth = 1.5) +
+                position = position_dodge(width = 0.5), width = 0.4, linewidth = 1) +
   geom_point(aes(x = Predictor, y = (exp(Estimate) - 1)*100,
                  color = Response),
              position = position_dodge(width = 0.5),
-             # shape = 1,
              size = 2) +
   facet_wrap(~`Income Group`) +
   coord_flip() +
-  labs(y = "Effect Size (%)", x = "") +
+  labs(title = "Model 1: Fixed Effects Only", y = "Effect Size (%)", x = "") +
   scale_color_manual(values = c("#1f77b4", "#ff7f0e")) +
   facet_wrap(~`Income Group`, ncol = 2) + 
-  theme_bw(25) + 
+  theme_bw(11) + 
   theme(strip.background =element_rect(fill="white"))
 
-p
+p1
 ```
+
+## Model 2: + (1 \| bioproject)
+
+```{r}
+# Filter Model 2 results from full_summary
+model2_summary <- full_summary %>%
+  filter(Model == "+(1|bioproject)") %>%
+  mutate(
+    lower = (exp(Q2.5) - 1) * 100,
+    upper = (exp(Q97.5) - 1) * 100,
+    mean = (exp(Estimate) - 1) * 100,
+    Significant = Q2.5 > 0 | Q97.5 < 0
+  ) %>%
+  filter(Predictor != "Intercept")
+
+# Summary table
+model2_summary %>%
+  dplyr::select(Predictor, Response, `Income Group`, Estimate, Q2.5, Q97.5, Significant) %>%
+  knitr::kable(digits = 3, caption = "Posterior summaries for Model 2 (Random Intercept for Bioproject)")
+
+# Plot model 2
+p2 <- full_summary %>% 
+  filter(Model == levels(full_summary$Model)[2]) %>%
+  mutate(lower = (exp(Q2.5) - 1)*100,
+         upper = (exp(Q97.5) - 1)*100, 
+         mean = (exp(Estimate) - 1)*100) %>%
+  filter(Predictor != "Intercept") %>% 
+  ggplot() + 
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper, color = Response),
+                position = position_dodge(width = 0.5), width = 0.4, linewidth = 1) +
+  geom_point(aes(x = Predictor, y = (exp(Estimate) - 1)*100,
+                 color = Response),
+             position = position_dodge(width = 0.5),
+             size = 2) +
+  facet_wrap(~`Income Group`) +
+  coord_flip() +
+  labs(title = "Model 2: + (1 | bioproject)", y = "Effect Size (%)", x = "") +
+  scale_color_manual(values = c("#1f77b4", "#ff7f0e")) +
+  facet_wrap(~`Income Group`, ncol = 2) + 
+  theme_bw(11) + 
+  theme(strip.background =element_rect(fill="white"))
+
+p2
+```
+
+## Model 3: + log(readcount)
+
+```{r}
+# Filter Model 3 results from full_summary
+model3_summary <- full_summary %>%
+  filter(Model == "+log(readcount)") %>%
+  mutate(
+    lower = (exp(Q2.5) - 1) * 100,
+    upper = (exp(Q97.5) - 1) * 100,
+    mean = (exp(Estimate) - 1) * 100,
+    Significant = Q2.5 > 0 | Q97.5 < 0
+  ) %>%
+  filter(Predictor != "Intercept")
+
+# Summary table
+model3_summary %>%
+  dplyr::select(Predictor, Response, `Income Group`, Estimate, Q2.5, Q97.5, Significant) %>%
+  knitr::kable(digits = 3, caption = "Posterior summaries for Model 3 (+ log(readcount))")
+
+# Plot model 3
+p3 <- full_summary %>% 
+  filter(Model == levels(full_summary$Model)[3]) %>%
+  mutate(lower = (exp(Q2.5) - 1)*100,
+         upper = (exp(Q97.5) - 1)*100, 
+         mean = (exp(Estimate) - 1)*100) %>%
+  filter(Predictor != "Intercept") %>% 
+  ggplot() + 
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper, color = Response),
+                position = position_dodge(width = 0.5), width = 0.4, linewidth = 1) +
+  geom_point(aes(x = Predictor, y = (exp(Estimate) - 1)*100,
+                 color = Response),
+             position = position_dodge(width = 0.5),
+             size = 2) +
+  facet_wrap(~`Income Group`) +
+  coord_flip() +
+  labs(title = "Model 3: + log(readcount)", y = "Effect Size (%)", x = "") +
+  scale_color_manual(values = c("#1f77b4", "#ff7f0e")) +
+  facet_wrap(~`Income Group`, ncol = 2) + 
+  theme_bw(11) + 
+  theme(strip.background =element_rect(fill="white"))
+
+p3
+```
+
+## Model 4: + (1 \| bioproject) + log(readcount)
+
+```{r}
+# Filter Model 4 results from full_summary
+model4_summary <- full_summary %>%
+  filter(Model == "+(1|bioproject)+log(readcount)") %>%
+  mutate(
+    lower = (exp(Q2.5) - 1) * 100,
+    upper = (exp(Q97.5) - 1) * 100,
+    mean = (exp(Estimate) - 1) * 100,
+    Significant = Q2.5 > 0 | Q97.5 < 0
+  ) %>%
+  filter(Predictor != "Intercept")
+
+# Summary table
+model4_summary %>%
+  dplyr::select(Predictor, Response, `Income Group`, Estimate, Q2.5, Q97.5, Significant) %>%
+  knitr::kable(digits = 3, caption = "Posterior summaries for Model 4 (+ log(readcount) + (1 | bioproject))")
+
+# Plot model 4
+p4 <- full_summary %>% 
+  filter(Model == levels(full_summary$Model)[4]) %>%
+  mutate(lower = (exp(Q2.5) - 1)*100,
+         upper = (exp(Q97.5) - 1)*100, 
+         mean = (exp(Estimate) - 1)*100) %>%
+  filter(Predictor != "Intercept") %>% 
+  ggplot() + 
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper, color = Response),
+                position = position_dodge(width = 0.5), width = 0.4, linewidth = 1) +
+  geom_point(aes(x = Predictor, y = (exp(Estimate) - 1)*100,
+                 color = Response),
+             position = position_dodge(width = 0.5),
+             size = 2) +
+  facet_wrap(~`Income Group`) +
+  coord_flip() +
+  labs( title = "Model 4: + (1 | bioproject) + log(readcount)", y = "Effect Size (%)", x = "") +
+  scale_color_manual(values = c("#1f77b4", "#ff7f0e")) +
+  facet_wrap(~`Income Group`, ncol = 2) + 
+  theme_bw(11) + 
+  theme(strip.background =element_rect(fill="white"))
+
+p4
+
+```
+
+## Comparison Across Models
+
+```{r, combineplot, fig.width=14, fig.height=10}
+
+# Create comparison plot across all four models
+comparison_p <- full_summary %>% 
+  filter(Predictor != "Intercept") %>%
+  mutate(
+    lower = (exp(Q2.5) - 1) * 100,
+    upper = (exp(Q97.5) - 1) * 100,
+    mean = (exp(Estimate) - 1) * 100
+  ) %>%
+  ggplot() + 
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_errorbar(
+    aes(x = Predictor, ymin = lower, ymax = upper, color = Response),
+    position = position_dodge(width = 0.6),
+    width = 1,
+    linewidth = 1
+  ) +
+  geom_point(
+    aes(x = Predictor, y = mean, color = Response),
+    position = position_dodge(width = 0.5),
+    size = 1
+  ) +
+  coord_flip() +
+  labs(y = "Effect Size (%)", x = "", title = "Comparison of Effect Estimates Across Models"
+  ) +
+  facet_wrap(Model ~ `Income Group`, ncol = 2) +
+  scale_color_manual(values = c("#1f77b4", "#ff7f0e")) +
+  theme_bw(10) +
+  theme(
+    strip.background = element_rect(fill = "white"),
+    axis.text.y = element_text(size = 8)
+  )
+
+print(comparison_p)
+
+```
+
+# Comparison of Log-normal and Log-transformed Normal Models
+
+In this analysis, we aim to compare two different statistical modeling approaches for handling skewed data: the log-normal distribution model and the normal distribution model applied to log-transformed data.
+
+1.  **Log-Normal Model**: This model assumes that the data follows a log-normal distribution, which is appropriate when the data is positively skewed. A log-normal distribution is often used when modeling non-negative data with a right-skewed distribution, as it models the logarithm of the data as normally distributed.
+
+2.  **Normal Model on Log-transformed Data**: In this approach, we first apply a log-transformation to the original data (log(x)) and then model the transformed data using a normal distribution. This approach is commonly used when data exhibits skewness, and it can help normalize the data for more effective modeling using a Gaussian distribution.
+
+## Model fitting
+
+Model fitting is computationally intensive and has been performed in a separate R script (`ComparisonModels.R`). Please ensure that this script is available in your working directory.
+
+The resulting model objects are saved as .rds files for each model (e.g., `fit_ARG_lognormal.rds`, `fit_ARG_gaussian.rds`). These files are then loaded into this document to allow downstream summarization and visualization without re-running the computationally intensive model fitting.
+
+```{r, load2, include=FALSE}
+# Load the models
+fit_ARG_lognormal <- readRDS("fit_ARG_lognormal.rds")
+fit_ARG_gaussian <- readRDS("fit_ARG_gaussian.rds")
+
+# Combine models into respective lists
+fit_list_lognormal <- list(
+  fit_ARG_load = fit_ARG_lognormal
+)
+
+fit_list_gaussian <- list(
+  fit_ARG_load = fit_ARG_gaussian
+)
+```
+
+## Model Comparison
+
+While both models analyze the same outcome conceptually, they are fitted to different versions of the response variable: the log-normal model to the original scale and the Gaussian model to the log-transformed scale (`log(y)`). Because of this, they operate on different likelihoods and data scales.
+
+As a result, information criteria such as WAIC or PSIS-LOO cannot be used to compare them meaningfully. These methods assume models are fitted to the same observed data, which is not the case here. Any visual comparisons presented are therefore illustrative only, and not intended for formal model selection or performance ranking.
+
+To prepare for visualization, we extract and combine the posterior summaries from both models across income groups.
+
+```{r, summary2}
+# Results from Model 1: Gaussian with log transform
+full_summary_gaussian <- lapply(names(fit_list_gaussian), function(r) {  
+  lapply(incomes, function(ic) {
+    
+    # Extract posterior summaries for fixed effects (only coefficients for fixed effects)
+    my_summary <- posterior_summary(fit_list_gaussian[[r]][[ic+1]]) %>%
+      .[grep("^b_", rownames(.)), ] %>%                            
+      as.data.frame() %>%
+      rownames_to_column(var = "Feature") %>%
+      mutate(
+        Feature = gsub("b_", "", Feature),                         
+        Response = gsub("^fit[0-9]+_", "", r),                     
+        income_group = ifelse(ic == 1, "HIC", "LMIC"),             
+        Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE)    
+      ) %>%
+      dplyr::select(-Est.Error)                                    
+    
+    return(my_summary)
+  }) %>% do.call(rbind, .)
+}) %>% do.call(rbind, .) %>% mutate(model = "Gaussian")            
+
+
+# Results from Model 2: Log-normal + random intercept for bioproject
+full_summary_lognormal <- lapply(names(fit_list_lognormal), function(r) {
+  lapply(incomes, function(ic) {
+    
+    # Extract posterior summaries including adjustment for study-level random effects
+    my_summary <- posterior_summary(fit_list_lognormal[[r]][[ic+1]]) %>%
+      .[grep("^b_", rownames(.)), ] %>%                            
+      as.data.frame() %>%
+      rownames_to_column(var = "Feature") %>%
+      mutate(
+        Feature = gsub("b_", "", Feature),                         
+        Response = gsub("^fit[0-9]+_", "", r),                     
+        income_group = ifelse(ic == 1, "HIC", "LMIC"),             
+        Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE)    
+      ) %>%
+      dplyr::select(-Est.Error)                                    
+    
+    return(my_summary)
+  }) %>% do.call(rbind, .)
+}) %>% do.call(rbind, .) %>% mutate(model = "Log-normal") 
+
+# Combine results from both models
+full_summary <- list(
+  full_summary_lognormal,
+  full_summary_gaussian
+) %>% do.call(rbind, .)
+
+# Format model labels as a factor with custom order
+full_summary <- full_summary %>%
+  mutate(
+    model = factor(model, levels = c("Log-normal", "Gaussian"))
+  )
+
+# Clean and harmonize feature and response names
+full_summary <- full_summary %>%
+  mutate(
+    Feature = gsub("continent", "", Feature),
+    Feature = gsub("age_category", "", Feature),
+    Feature = gsub("Usage_high", "High Antibiotic Use", Feature),
+    Feature = gsub("sex_num_Men", "Woman", Feature),
+    Feature = gsub("_", " ", Feature),
+    Feature = gsub("logreadcount", "log(read count)", Feature),
+    Response = gsub("ARG_load", "ARG load", Response),
+    Response = gsub("shannon_diversity", "Shannon", Response)
+  )
+
+# Rename and select relevant columns for summary table and plotting
+full_summary <- full_summary %>%
+  select(
+    Predictor = Feature,
+    Estimate, Q2.5, Q97.5,
+    Response,
+    `Income Group` = income_group, 
+    model
+  )
+
+# Compute exponentiated estimates and confidence intervals for interpretation
+full_summary <- full_summary %>%
+  mutate(
+    `exp(Estimate)` = exp(Estimate),
+    `exp(Q2.5)` = exp(Q2.5),
+    `exp(Q97.5)` = exp(Q97.5)
+  )
+
+# Set custom display order for predictors
+full_summary$Predictor <- factor(full_summary$Predictor,
+  levels = c(
+    "log(read count)", 
+    "South America", "Oceania", "North America", "Europe", "Asia",
+    "Oldest Adult", "Older Adult", "Young Adult", "Teenager",
+    "Children", "Toddler", "Infant",
+    "High Antibiotic Use", "Woman", "Intercept"
+  )
+)
+```
+
+To explore potential differences between the models, we next visualize the estimated effects across predictors and income groups.
+
+```{r, combineplot2, fig.width=14, fig.height=10}
+comparison_log <- full_summary %>%
+  filter(Predictor != "Intercept") %>%
+  mutate(
+    lower = (exp(Q2.5) - 1) * 100,
+    upper = (exp(Q97.5) - 1) * 100,
+    mean = (exp(Estimate) - 1) * 100
+  ) %>%
+  ggplot() + 
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  
+  geom_errorbar(aes(x = Predictor, ymin = lower, ymax = upper),
+                position = position_dodge(width = 0.6), width = 0.5, linewidth = 1,
+                color = "#1f77b4"
+  ) +
+  
+  geom_point(aes(x = Predictor, y = mean), position = position_dodge(width = 0.6),
+             size = 1.5, color = "#1f77b4"
+  ) +
+  
+  coord_flip() +
+  labs(y = "Effect Size (%)",  x = "",  
+       title = "Comparison of Effect Estimates Across Models"
+  ) +
+  facet_wrap(model ~ `Income Group`, ncol = 2) +
+  theme_bw(14) +
+  theme(strip.background = element_rect(fill = "white"), 
+        axis.text.y = element_text(size = 12)
+  )
+
+print(comparison_log)
+```
+
+Based on the visualization, there are no substantial differences in the estimated effects between the two models across predictors and income groups. In terms of computational performance, model fitting times were also very similar, providing no practical advantage to either approach.
+
+Taken together, these observations do not favor one model over the other based on empirical results. However, from a modeling perspective, the log-normal model remains the more principled choice, as it directly models the original skewed data without requiring transformation.
+
+# Age Effects Stratified by Income Group and Gender
+
+To explore how age affects microbial outcomes across different populations, we fitted separate models within four demographic subgroups defined by income group (HIC vs. LMIC) and gender (Women vs. Men). Each model includes only age category as a predictor, allowing us to examine age-related patterns while holding other factors constant.
+
+This stratified approach provides a simple way to evaluate whether age-related effects differ between, for example, women in high-income countries and men in low- and middle-income countries. The modeling was performed separately for both outcome variables: ARG load and Shannon diversity.
+
+We fit separate models for each combination of income group and gender. Each model includes only age category as a fixed effect, and no additional covariates.
+
+The general model is:
+
+$$
+y_i \sim \begin{cases}\text{LogNormal}(\mu_i, \sigma^2) & \text{for ARG load} \\\\\mathcal{N}(\mu_i, \sigma^2) & \text{for Shannon diversity}\end{cases}
+$$
+
+$$
+\mu_i = \beta_0 + \sum_l \beta_l \cdot \text{AgeCategory}_{il}
+$$
+
+Where:
+
+-   $y_i$ is the observed response (e.g., ARG load) for individual $i$
+-   $\beta_0$ is the intercept (fixed effect)
+-   $\beta_l$ are the fixed effects for each age category $l$
+-   $\sigma^2$ is the residual variance
+
+Each model is fit independently for one of the four income–gender subgroups, making no assumptions of shared structure across them.
+
+Model fitting is computationally intensive and has been performed in a separate R script (`StratifiedModel.R`). Please ensure that this script is available in your working directory. The models have been saved as `.rds` files and are loaded here to enable downstream analysis.
+
+```{r, include=FALSE}
+# Load models
+fit_ARG_load_age <- readRDS("fit_ARG_load_age.rds")
+fit_shannon_diversity_age <- readRDS("fit_shannon_diversity_age.rds")
+
+# Combine models into respective lists
+fit_list_age <- list(
+  fit_ARG_load_age = fit_ARG_load_age,
+  fit_shannon_diversity_age = fit_shannon_diversity_age
+)
+```
+
+We extract the posterior summaries (posterior means and 95% credible intervals) of fixed-effect coefficients from each model. These include age group and continent effects for each income-gender combination. The results are organized into a single summary table with relevant grouping information (income, gender, and response variable).
+
+```{r}
+# Income and gender values
+incomes <- 0:1
+genders <- c("Women", "Men")
+
+# Loop through responses and extract summaries
+full_summary_age <- lapply(names(fit_list_age), function(response_name) {
+  response_label <- ifelse(response_name == "fit_ARG_load_age", "ARG load", "Shannon")
+  fit_list <- fit_list_age[[response_name]]
+  
+  lapply(incomes, function(ic) {
+    lapply(genders, function(g) {
+      
+      fit <- fit_list[[paste0(ic, "_", g)]]
+      if (is.null(fit)) return(NULL)
+      
+      my_summary <- posterior_summary(fit) %>%
+        .[grep("^b_", rownames(.)), ] %>%
+        as.data.frame() %>%
+        rownames_to_column(var = "Feature") %>%
+        mutate(
+          Feature = gsub("^b_", "", Feature),
+          Response = response_label,
+          Income = ifelse(ic == 1, "HIC", "LMIC"),
+          Gender = ifelse(g == "Women", "Woman", "Man"),
+          Significant = Q2.5 > 0 | Q97.5 < 0
+        ) %>%
+        dplyr::select(-Est.Error)
+      
+      return(my_summary)
+    }) %>% bind_rows()
+  }) %>% bind_rows()
+}) %>% bind_rows()
+
+```
+
+To prepare for visualization, we clean the feature names for clarity, compute exponentiated effect sizes, and define a consistent display order for predictors.
+
+```{r}
+# Clean and format predictor names and compute exponentiated values
+full_summary_age <- full_summary_age %>%
+  mutate(
+    Predictor = gsub("^age[ _]?category", "", Feature),
+    Predictor = recode(Predictor,
+                       "YoungAdult" = "Young Adult",
+                       "OlderAdult" = "Older Adult",
+                       "OldestAdult" = "Oldest Adult"),
+    Predictor = trimws(Predictor),
+     # Compute exponentiated estimates and credible intervals
+    `exp(Estimate)` = exp(Estimate),
+    `exp(Q2.5)` = exp(Q2.5),
+    `exp(Q97.5)` = exp(Q97.5)
+  ) %>%
+  select(Predictor, Estimate, Q2.5, Q97.5,
+         `exp(Estimate)`, `exp(Q2.5)`, `exp(Q97.5)`,
+         Response, Income, Gender, Significant)
+
+
+# Define desired display order for predictors in plots
+all_predictors <- c(
+  "Oldest Adult", "Older Adult", "Young Adult", "Teenager",
+  "Children", "Toddler", "Infant"
+)
+full_summary_age$Predictor <- factor(full_summary_age$Predictor, levels = all_predictors)
+```
+
+Finally, we plot the estimated effect sizes for each predictor. The plot is faceted by gender and income group to allow for easy comparison of demographic patterns. Both outcomes are shown side by side in color, with error bars representing 95% credible intervals.
+
+```{r}
+# Plot
+plot_age_effects <- full_summary_age %>%
+  filter(Predictor != "Intercept") %>%
+  mutate(
+    mean = (exp(Estimate) - 1) * 100,
+    lower = (exp(Q2.5) - 1) * 100,
+    upper = (exp(Q97.5) - 1) * 100
+  ) %>%
+  ggplot(aes(x = Predictor, y = mean, color = Response)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_errorbar(aes(ymin = lower, ymax = upper),
+                width = 0.3, linewidth = 1.2,
+                position = position_dodge(width = 0.5)) +
+  geom_point(size = 2,
+             position = position_dodge(width = 0.5)) +
+  facet_grid(Gender ~ Income) +
+  coord_flip() +
+  scale_color_manual(values = c("#1f77b4", "#ff7f0e")) +
+  labs(
+    title = "Effect Estimates by Age and Continent\nStratified by Income Group and Gender",
+    y = "Effect Size (%)", x = "", color = "Response"
+  ) +
+  theme_bw(12) +
+  theme(strip.background = element_rect(fill = "white"))
+
+print(plot_age_effects)
+```
+
+
+# Hierarchical Age Model by Income and Gender
+
+We use a hierarchical model that mirrors the structure of the data: income group → gender → age category. People are first grouped by income level, then by gender within each income group, and finally by age category. This setup lets the age effects differ between income and gender groups, making it easier to spot patterns that vary across these groups.
+
+We use either a normal or log-normal likelihood depending on the outcome:
+
+$$
+y_{ijk} \sim \begin{cases}\text{LogNormal}(\mu_{ijk}, \sigma^2) & \text{for ARG load} \\\\\mathcal{N}(\mu_{ijk}, \sigma^2) & \text{for Shannon diversity}\end{cases}
+$$
+
+$$
+\mu_{ijk} = \beta_0 + \sum_l \beta_l \cdot \text{AgeCategory}_{ijkl} + b_{0i} + b_{0ij} + \sum_l b_{li} \cdot \text{AgeCategory}_{ijkl} + \sum_l b_{lij} \cdot \text{AgeCategory}_{ijkl}
+$$
+
+Where:
+
+-   $y_{ijk}$ is the response for individual $k$ in gender group $j$ and income group $i$ (e.g., Shannon diversity or ARG load)
+
+-   $\beta_0$ is the overall intercept (fixed effect)
+
+-   $\beta_l$ are the fixed effects for each age category $l$
+
+-   $b_{0i}$ is the random intercept for income group $i$
+
+-   $b_{0ij}$ is the random intercept for gender group $j$ within income group $i$
+
+-   $b_{li}$ are the random slopes for age category $l$ within income group $i$
+
+-   $b_{lij}$ are the random slopes for age category $l$ within gender group $j$ and income group $i$
+
+-   $\sigma^2$ is the residual variance
+
+To reduce computation time and avoid convergence issues, the hierarchical models were fitted on a subset of the full dataset. Specifically, 20 observations were randomly selected from each combination of income group, gender, and age category, ensuring balanced representation across all demographic strata. 
+
+Model fitting in this case is computationally intensive and has been performed in a separate R script (`HierarchicalModel.R`). Please ensure that this script is available in your working directory. The models have been saved as `.rds` files and are loaded here to enable downstream analysis.
+
+```{r, include=FALSE}
+# Load hierarchical models (age only)
+# These models were fitted using a multilevel structure:
+# (age_category + (1 + age_category | income_group_HIC / gender))
+
+fit_ARG_hierarchical <- readRDS("fit_ARG_hierarchical.rds")
+fit_shannon_hierarchical <- readRDS("fit_shannon_hierarchical.rds")
+
+# Combine models into a named list for processing
+fit_list_hierarchical <- list(
+  "ARG load" = fit_ARG_hierarchical,
+  "Shannon" = fit_shannon_hierarchical
+)
+```
+
+We extract the posterior summaries (posterior means and 95% credible intervals) of fixed-effect coefficients from each model. These include age group and continent effects for each income-gender combination. The results are organized into a single summary table with relevant grouping information (income, gender, and response variable). Also to prepare for visualization, we clean the feature names for clarity, compute exponentiated effect sizes, and define a consistent display order for predictors.
+
+```{r}
+# Extract group-specific fixed + random effects
+full_summary_hier <- lapply(names(fit_list_hierarchical), function(name) {
+  model <- fit_list_hierarchical[[name]]
+
+  posterior_summary(model) %>%
+    as.data.frame() %>%
+    rownames_to_column("term") %>%
+    filter(str_detect(term, "r_income_group_HIC:gender\\[")) %>%
+    mutate(
+      Response = name,
+      # Extract inside brackets, e.g., "0_Women,age_categoryInfant"
+      Group = str_extract(term, "\\[.*?\\]") %>% str_remove_all("\\[|\\]"),
+      # Split group into income + gender
+      Income_raw = str_split(Group, ",", simplify = TRUE)[,1],
+      Var_raw = str_split(Group, ",", simplify = TRUE)[,2],
+      Income = ifelse(str_detect(Income_raw, "^1"), "HIC", "LMIC"),
+      Gender = ifelse(str_detect(Income_raw, "Women"), "Woman", "Man"),
+      Predictor = str_remove(Var_raw, "age_category"),
+      Predictor = recode(Predictor,
+        "YoungAdult" = "Young Adult",
+        "OlderAdult" = "Older Adult",
+        "OldestAdult" = "Oldest Adult"
+      ),
+      Predictor = trimws(Predictor)
+    ) %>%
+    filter(!is.na(Predictor)) %>%
+    mutate(
+      `exp(Estimate)` = ifelse(Response == "ARG load", exp(Estimate), Estimate),
+      `exp(Q2.5)` = ifelse(Response == "ARG load", exp(Q2.5), Q2.5),
+      `exp(Q97.5)` = ifelse(Response == "ARG load", exp(Q97.5), Q97.5)
+    ) %>%
+    select(Predictor, Estimate, Q2.5, Q97.5,
+           `exp(Estimate)`, `exp(Q2.5)`, `exp(Q97.5)`,
+           Response, Income, Gender)
+}) %>% bind_rows()
+
+
+# Order predictors
+age_order <- c("Oldest Adult", "Older Adult", "Young Adult", "Teenager", "Children", "Toddler", "Infant")
+
+full_summary_hier$Predictor <- factor(full_summary_hier$Predictor, levels = age_order)
+```
+
+
+Next, we visualize the estimated effects from the hierarchical models.
+
+
+```{r}
+# Plot
+plot_hierarchical_age <- full_summary_hier%>%
+  filter(!is.na(Predictor), Predictor != "Intercept") %>%
+  mutate(
+    mean = (`exp(Estimate)` - 1) * 100,
+    lower = (`exp(Q2.5)` - 1) * 100,
+    upper = (`exp(Q97.5)` - 1) * 100
+  ) %>%
+  ggplot(aes(x = Predictor, y = mean, color = Response)) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_errorbar(
+    aes(ymin = lower, ymax = upper),
+    width = 0.3, linewidth = 1.2,
+    position = position_dodge(width = 0.5)
+  ) +
+  geom_point(
+    size = 2,
+    position = position_dodge(width = 0.5)
+  ) +
+  facet_grid(Gender ~ Income) +
+  coord_flip() +
+  scale_color_manual(values = c("#1f77b4", "#ff7f0e")) +
+  labs(
+    title = "Effect Estimates by Age Category\nStratified by Income Group and Gender (Hierarchical Model)",
+    y = "Effect Size (%)", x = "", color = "Response"
+  ) +
+  theme_bw(base_size = 12) +
+  theme(strip.background = element_rect(fill = "white"))
+
+print(plot_hierarchical_age)
+```
+
+This figure shows age-related effect estimates from a hierarchical model stratified by income group and gender. Because fitting the full model on the entire dataset was too computationally intensive, a random subset was used instead with a maximum of 20 observations per group. As a result, the model is not very stable, and some of the estimates appear unrealistically large with wide uncertainty intervals. The subset is not representative enough to support reliable inference. These results highlight the limitations of hierarchical modeling under small sample sizes, and emphasize the need for either simplified models or greater computational resources when using the full dataset.
+
+
+
+
+# Comparing Model Stability Under Small Samples: Probabilistic vs. Frequentist Approaches
+
+This section explores how probabilistic (Bayesian) and frequentist models behave under limited data conditions. The goal is to evaluate model robustness and stability when the available sample size is small.
+
+To achieve this, we repeatedly draw random subsamples of varying sizes from a larger dataset. For each subsample, we fit two models:
+
+- **A Bayesian model**, implemented with the brms package
+
+- **A frequentist linear model** using standard linear regression (lm())
+
+We extract the effect estimates and the width of the 95% uncertainty intervals (credible intervals for Bayesian, confidence intervals for frequentist) for age category predictors. By comparing these across repetitions and sample sizes, we assess how each model handles uncertainty under constrained data scenarios.
+
+The comparison is performed for two outcome variables:
+
+1. ARG load (modeled using a lognormal likelihood)
+
+2. Shannon diversity index (modeled using a Gaussian likelihood)
+
+Model fitting and repetitions are computationally intensive and have been performed in a separate R script (`FrequentistCompare.R`). Please ensure that this script is available in your working directory. The model outputs have been saved as `.rds` files and are loaded here for downstream analysis.
+
+```{r, include=FALSE}
+# Load simulation results for both models
+results_ARG <- readRDS("results_compare_ARG.rds")
+results_shannon <- readRDS("results_compare_shannon.rds")
+```
+
+
+## Results: ARG load
+
+The first analysis focuses on ARG load as the response variable, modeled using a lognormal likelihood. The following visualizations and summary statistics are based on simulation results obtained from repeated subsampling. Five independent subsamples were drawn for each of the selected sample sizes: 30, 80, 150, 250, and 500. For each subsample, both a Bayesian and a frequentist model were fitted to estimate the effects of age categories on ARG load. The focus is on comparing the width and stability of the 95% uncertainty intervals produced by the two modeling approaches across varying sample sizes.
+
+```{r}
+# Plot the distribution of 95% interval widths by model and sample size (ARG model)
+# Separate panels are shown for each age category
+ggplot(results_ARG, aes(x = factor(sample_size), y = width, fill = model)) +
+  geom_boxplot(position = position_dodge(0.8), alpha = 0.85, linewidth = 0.6) +
+  facet_wrap(~Predictor, scales = "free_y", ncol = 3) +
+  labs(title = "ARG Load: 95% Interval Width by Sample Size",
+       x = "Sample Size", y = "95% Interval Width",
+       fill = "Model") +
+  scale_fill_manual(values = c("Bayesian" = "green",
+                               "Frequentist" = "coral")) +
+  theme_bw(base_size = 11) +
+  theme(
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(face = "bold"))
+
+
+# Create a summary table with mean and standard deviation of interval widths
+# Grouped by model type and sample size (across all age categories)
+summary_table_ARG <- results_ARG %>%
+  group_by(model, sample_size) %>%
+  summarise(
+    mean_width = mean(width),
+    sd_width = sd(width),
+    .groups = "drop"
+  ) %>%
+  arrange(sample_size, model)
+
+summary_table_ARG
+```
+
+The boxplot illustrates the distribution of 95% interval widths for each age category predictor under both Bayesian and frequentist models. At small sample sizes (e.g., n = 30), Bayesian intervals tend to be narrower and more stable across most age groups. This advantage is particularly evident for categories such as "Oldest Adult", "Toddler", and "Older Adult", where frequentist intervals show greater variability and wider estimates.
+
+As the sample size increases, the two approaches converge toward similar interval widths. By n = 250–500, the differences between the models are minimal. These visual findings align with the numerical summaries and confirm that the Bayesian model provides more robust interval estimation under limited data conditions, especially for smaller or more variable subgroups.
+
+
+
+## Results: Shannon Diversity
+
+The second analysis focuses on the Shannon diversity as the response variable, modeled using a Gaussian likelihood. The analysis follows the same simulation and modeling framework as with ARG load: five independent subsamples were drawn for each of the sample sizes (30, 80, 150, 250, 500), and both Bayesian and frequentist models were fitted to each. The aim is again to compare the estimated effects of age categories and evaluate the width and variability of the resulting 95% uncertainty intervals across varying sample sizes.
+
+
+```{r}
+# Plot the distribution of 95% interval widths by model and sample size (Shannon model) 
+# Separate panels are shown for each age category
+ggplot(results_shannon, aes(x = factor(sample_size), y = width, fill = model)) +
+  geom_boxplot(position = position_dodge(0.8), alpha = 0.85, linewidth = 0.6) +
+  facet_wrap(~Predictor, scales = "free_y", ncol = 3) +
+  labs(title = "Shannon Index: 95% Interval Width by Sample Size",
+       x = "Sample Size", y = "95% Interval Width",
+       fill = "Model") +
+  scale_fill_manual(values = c("Bayesian" = "green",
+                               "Frequentist" = "coral")) +
+  theme_bw(base_size = 11) +
+  theme(
+    strip.background = element_rect(fill = "white"),
+    strip.text = element_text(face = "bold")
+  )
+
+
+# Create a summary table with mean and standard deviation of interval widths
+# Grouped by model type and sample size (across all age categories)
+summary_table_shannon <- results_shannon %>%
+  group_by(model, sample_size) %>%
+  summarise(
+    mean_width = mean(width),
+    sd_width = sd(width),
+    .groups = "drop"
+  ) %>%
+  arrange(sample_size, model)
+
+summary_table_shannon
+
+```
+
+While the overall pattern for the Shannon diversity index is similar to that observed with ARG load, the convergence between the Bayesian and frequentist models appears to occur slightly faster. At smaller sample sizes (e.g., n = 30 and 80), the Bayesian intervals are again somewhat narrower and more stable, but the difference diminishes more quickly as the sample size increases. By n = 150, the average interval widths are already very close. This may reflect the more symmetric distribution of the Shannon index, which is modeled using a Gaussian likelihood rather than a lognormal distribution.
+
+
+

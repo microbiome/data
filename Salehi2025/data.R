@@ -192,3 +192,18 @@ subset_data <- as.data.frame(adult_metadata) %>%
 
 # Set "Middle-Aged Adult" as the reference category for age
 subset_data$age_category <- relevel(factor(subset_data$age_category), ref = "Middle-Aged Adult")
+
+
+# Create base data frame for modeling and set "Middle-Aged Adult" as the reference category for age
+adult_df <- as.data.frame(adult_metadata) %>%
+  mutate(
+    age_category = factor(age_category,
+                          levels = c("Infant", "Toddler", "Children", "Teenager",
+                                     "Young Adult", "Middle-Aged Adult",
+                                     "Older Adult", "Oldest Adult")),
+    age_category = relevel(age_category, ref = "Middle-Aged Adult")
+  )
+
+# Create a readable categorical variable for income group (HIC vs. LMIC)
+adult_df <- adult_df %>%
+  mutate(income_group = if_else(income_group_HIC == 1, "HIC", "LMIC"))

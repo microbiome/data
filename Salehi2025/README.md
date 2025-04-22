@@ -1,4 +1,4 @@
-28.3.2025
+22.4.2025
 
 # Gender Differences in Global Antimicrobial Resistance
 
@@ -34,6 +34,8 @@ This repository contains a cleaned demo dataset (`tse_AMRdemo.rds`) and supporti
 
 -    `main.R` – Wrapper script to execute all of the above in correct order.
 
+-    All fitted models and simulation results are saved as `.rds` files to avoid repeated computation.
+
 ## How to Use and Reproduce Figure 5
 
 To load the dataset in R:
@@ -63,8 +65,16 @@ To reproduce the analysis and generate Figure 5 from the manuscript:
 
 2.  Open R or RStudio in the same directory where these files are located.
 
-3. Run the following line in your R console to execute all required preprocessing and modeling steps:
+3. If you want to re-run the full analysis from scratch (including model fitting), run:
 
 ```r
 source("main.R")
+```
+
+**Tip:** If you do not want to re-fit the models, you can skip the long-running computations by downloading all `.rds` result files from the repository, and then running just the following:
+
+```r
+source("data.R")
+source("funcs.R")
+quarto::quarto_render("report.qmd")
 ```

@@ -22,13 +22,13 @@ This repository contains a cleaned demo dataset (`tse_AMRdemo.rds`) and supporti
 
 -   `model.R` – Runs the Bayesian models for the manuscript (slow, runs brms).
 
--   `ComparisonModels.R` – Comparison of log-normal and log-transformed normal models.
+-   `ComparisonModelLognormal.R` and `ComparisonModelGaussian.R` – Comparison of log-normal and log-transformed normal models.
 
--   `StratifiedModel.R` – Stratified model fitting by subgroups such as age and gender.
+-   `StratifiedModelARG.R` and `StratifiedModelShannon.R` – Stratified model fitting by subgroups such as age and gender.
 
--   `HierarchicalModel.R` – Hierarchical model with nested random effects.
+-   `HierarchicalModelARG.R` and `HierarchicalModelShannon.R` – Hierarchical model with nested random effects.
 
--   `FrequentistCompare.R` – Simulation-based comparison of Bayesian and frequentist models for ARG and Shannon.
+-   `FrequentistCompareARG.R` and `FrequentistCompareShannon.R` – Simulation-based comparison of Bayesian and frequentist models for ARG and Shannon.
 
 -   `report.qmd` – Quarto document that loads precomputed model results and generates Figure 5.
 
@@ -56,10 +56,14 @@ To reproduce the analysis and generate Figure 5 from the manuscript:
     - `data.R`
     - `funcs.R`
     - `model.R`
-    - `ComparisonModels.R`
-    - `StratifiedModel.R`
-    - `HierarchicalModel.R`
-    - `FrequentistCompare.R`
+    - `ComparisonModelLognormal.R`
+    - `ComparisonModelGaussian.R`
+    - `StratifiedModelARG.R`
+    - `StratifiedModelShannon.R`
+    - `HierarchicalModelARG.R`
+    - `HierarchicalModelShannon.R`
+    - `FrequentistCompareARG.R`
+    - `FrequentistCompareShannon.R`
     - `report.qmd`
     - `main.R`
 

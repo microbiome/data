@@ -1,8 +1,8 @@
-22.4.2025
+5.5.2025
 
 # Gender Differences in Global Antimicrobial Resistance
 
-This repository contains a cleaned demo dataset (`tse_AMRdemo.rds`) and supporting code used in the analysis of gender-related differences in global antimicrobial resistance (AMR), as illustrated in Figure 5 of the manuscript.
+This repository contains a cleaned demo dataset (`tse_AMRdemo.rds`) and supporting code used in the analysis of gender-related differences in global antimicrobial resistance (AMR).
 
 ## Study Information
 
@@ -30,13 +30,15 @@ This repository contains a cleaned demo dataset (`tse_AMRdemo.rds`) and supporti
 
 -   `FrequentistCompareARG.R` and `FrequentistCompareShannon.R` – Simulation-based comparison of Bayesian and frequentist models for ARG and Shannon.
 
--   `report.qmd` – Quarto document that loads precomputed model results and generates Figure 5.
+-   `EnrichmentModels.R`  – runs enrichment models using Bayesian regression to estimate high ARG prevalence across groups
+
+-   `report.qmd` – Quarto document that loads precomputed model results and generates results.
 
 -    `main.R` – Wrapper script to execute all of the above in correct order.
 
 -    All fitted models and simulation results are saved as `.rds` files to avoid repeated computation.
 
-## How to Use and Reproduce Figure 5
+## How to Use and Reproduce the report
 
 To load the dataset in R:
 
@@ -64,6 +66,7 @@ To reproduce the analysis and generate Figure 5 from the manuscript:
     - `HierarchicalModelShannon.R`
     - `FrequentistCompareARG.R`
     - `FrequentistCompareShannon.R`
+    - `EnrichmentModels.R`
     - `report.qmd`
     - `main.R`
 

@@ -16,13 +16,15 @@ All required preprocessing and model fitting steps are executed via a wrapper sc
 
 -   `model.R` – statistical model fitting (computationally intensive)
 
-- `ComparisonModels.R` – comparison of log-normal vs. log-transformed normal models (computationally intensive)
+-   `ComparisonModelLognormal.R` and `ComparisonModelGaussian.R` – comparison of log-normal vs. log-transformed normal models (computationally intensive)
 
-- `StratifiedModel.R` – stratified model fitting by subgroups such as income group and gender (computationally intensive)
+-   `StratifiedModelARG.R` and `StratifiedModelShannon.R` – stratified model fitting by subgroups such as income group and gender (computationally intensive)
 
-- `HierarchicalModel.R` – hierarchical modeling with nested random effects (computationally intensive)
+-   `HierarchicalModelARG.R` and `HierarchicalModelShannon.R` – hierarchical modeling with nested random effects (computationally intensive)
 
-- `FrequentistCompare.R` – simulation-based comparison of Bayesian and frequentist models (computationally intensive)
+-   `FrequentistCompareARG.R` and `FrequentistCompareShannon.R` – simulation-based comparison of Bayesian and frequentist models (computationally intensive)
+
+-   `EnrichmentModels.R` – runs enrichment models using Bayesian regression to estimate high ARG prevalence across groups (computationally intensive)
 
 Before rendering this report, ensure that all these scripts are available in your working directory. To render this report and run all required scripts, make sure to execute script `main.R`.
 
@@ -140,8 +142,7 @@ fit_list4 <- list(
 Then, we define the response variables (ARG_load, shannon_diversity) and income groups (LMIC, HIC) used for stratified statistical modeling.
 
 ```{r}
-responses <- c("ARG_load", "shannon_diversity")
-incomes <- 0:1
+incomes <- c("LMIC", "HIC")
 set.seed(123123)
 ```
 
@@ -153,20 +154,20 @@ For each of the 4 model variants, we extract posterior estimates (mean and 95% c
 
 For each model, we extract coefficient estimates, 95% credible intervals, and compute whether the effect is statistically significant.
 
-```{r, models}
+```{r}
 # Results from Model 1: Fixed effects only (Reference)
 full_summary1 <- lapply(names(fit_list1), function(r) {  
   lapply(incomes, function(ic) {
     
     # Extract posterior summaries for fixed effects (only coefficients for fixed effects)
-    my_summary <- posterior_summary(fit_list1[[r]][[ic+1]]) %>%
+    my_summary <- posterior_summary(fit_list1[[r]][[ic]]) %>%
       .[grep("^b_", rownames(.)), ] %>%
       as.data.frame() %>%
       rownames_to_column(var = "Feature") %>%
       mutate(
         Feature = gsub("b_", "", Feature),
         Response = gsub("^fit[0-9]+_", "", r),
-        income_group = ifelse(ic == 1, "HIC", "LMIC"),
+        income_group = ic,
         Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE)  
       ) %>%
       dplyr::select(-Est.Error)
@@ -181,14 +182,14 @@ full_summary2 <- lapply(names(fit_list2), function(r) {
   lapply(incomes, function(ic) {
     
     # Posterior summaries including adjustment for study-level random effects
-    my_summary <- posterior_summary(fit_list2[[r]][[ic+1]]) %>%
+    my_summary <- posterior_summary(fit_list2[[r]][[ic]]) %>%
       .[grep("^b_", rownames(.)), ] %>%
       as.data.frame() %>%
       rownames_to_column(var = "Feature") %>%
       mutate(
         Feature = gsub("b_", "", Feature),
         Response = gsub("^fit[0-9]+_", "", r),
-        income_group = ifelse(ic == 1, "HIC", "LMIC"),
+        income_group = ic,
         Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE)
       ) %>%
       dplyr::select(-Est.Error)
@@ -203,14 +204,14 @@ full_summary3 <- lapply(names(fit_list3), function(r) {
   lapply(incomes, function(ic) {
     
     # Posterior summaries including adjustment for sequencing depth
-    my_summary <- posterior_summary(fit_list3[[r]][[ic+1]]) %>%
+    my_summary <- posterior_summary(fit_list3[[r]][[ic]]) %>%
       .[grep("^b_", rownames(.)), ] %>%
       as.data.frame() %>%
       rownames_to_column(var = "Feature") %>%
       mutate(
         Feature = gsub("b_", "", Feature),
         Response = gsub("^fit[0-9]+_", "", r),
-        income_group = ifelse(ic == 1, "HIC", "LMIC"),
+        income_group = ic,
         Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE)
       ) %>%
       dplyr::select(-Est.Error)
@@ -225,14 +226,14 @@ full_summary4 <- lapply(names(fit_list4), function(r) {
   lapply(incomes, function(ic) {
     
     # Posterior summaries including both sequencing depth and study-level random effect
-    my_summary <- posterior_summary(fit_list4[[r]][[ic+1]]) %>%
+    my_summary <- posterior_summary(fit_list4[[r]][[ic]]) %>%
       .[grep("^b_", rownames(.)), ] %>%
       as.data.frame() %>%
       rownames_to_column(var = "Feature") %>%
       mutate(
         Feature = gsub("b_", "", Feature),
         Response = gsub("^fit[0-9]+_", "", r),
-        income_group = ifelse(ic == 1, "HIC", "LMIC"),
+        income_group = ic,
         Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE)
       ) %>%
       dplyr::select(-Est.Error)
@@ -275,11 +276,13 @@ full_summary <- full_summary %>%
 # Clean and harmonize variable names for better readability
 full_summary <- full_summary %>%
   mutate(
-    Feature = gsub("continent", "", Feature),
-    Feature = gsub("age_category", "", Feature),
-    Feature = gsub("Usage_high", "High Antibiotic Use", Feature),
-    Feature = gsub("sex_num_Men", "Woman", Feature),
+    Feature = gsub("^continent", "", Feature),
+    Feature = gsub("^age_category", "", Feature),
+    Feature = gsub("^genderWomen", "Woman", Feature),
+    Feature = gsub("^Usage_high1", "High Antibiotic Use", Feature),
+    Feature = gsub("([a-z])([A-Z])", "\\1 \\2", Feature),
     Feature = gsub("_", " ", Feature),
+    Feature = trimws(Feature),
     Feature = gsub("logreadcount", "log(read count)", Feature),
     Response = gsub("ARG_load", "ARG load", Response),
     Response = gsub("shannon_diversity", "Shannon", Response)
@@ -555,7 +558,7 @@ In this analysis, we aim to compare two different statistical modeling approache
 
 ## Model fitting
 
-Model fitting is computationally intensive and has been performed in a separate R script (`ComparisonModels.R`). Please ensure that this script is available in your working directory.
+Model fitting is computationally intensive and has been performed in a separate R scripts (`ComparisonModelLognormal.R` and `ComparisonModelGaussian.R`). Please ensure that this script is available in your working directory.
 
 The resulting model objects are saved as .rds files for each model (e.g., `fit_ARG_lognormal.rds`, `fit_ARG_gaussian.rds`). These files are then loaded into this document to allow downstream summarization and visualization without re-running the computationally intensive model fitting.
 
@@ -588,14 +591,14 @@ full_summary_gaussian <- lapply(names(fit_list_gaussian), function(r) {
   lapply(incomes, function(ic) {
     
     # Extract posterior summaries for fixed effects (only coefficients for fixed effects)
-    my_summary <- posterior_summary(fit_list_gaussian[[r]][[ic+1]]) %>%
+    my_summary <- posterior_summary(fit_list_gaussian[[r]][[ic]]) %>%
       .[grep("^b_", rownames(.)), ] %>%                            
       as.data.frame() %>%
       rownames_to_column(var = "Feature") %>%
       mutate(
         Feature = gsub("b_", "", Feature),                         
         Response = gsub("^fit[0-9]+_", "", r),                     
-        income_group = ifelse(ic == 1, "HIC", "LMIC"),             
+        income_group = ic,                                         
         Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE)    
       ) %>%
       dplyr::select(-Est.Error)                                    
@@ -610,14 +613,14 @@ full_summary_lognormal <- lapply(names(fit_list_lognormal), function(r) {
   lapply(incomes, function(ic) {
     
     # Extract posterior summaries including adjustment for study-level random effects
-    my_summary <- posterior_summary(fit_list_lognormal[[r]][[ic+1]]) %>%
+    my_summary <- posterior_summary(fit_list_lognormal[[r]][[ic]]) %>%
       .[grep("^b_", rownames(.)), ] %>%                            
       as.data.frame() %>%
       rownames_to_column(var = "Feature") %>%
       mutate(
         Feature = gsub("b_", "", Feature),                         
         Response = gsub("^fit[0-9]+_", "", r),                     
-        income_group = ifelse(ic == 1, "HIC", "LMIC"),             
+        income_group = ic,                                         
         Significant = ifelse(Q2.5 > 0 | Q97.5 < 0, TRUE, FALSE)    
       ) %>%
       dplyr::select(-Est.Error)                                    
@@ -641,11 +644,13 @@ full_summary <- full_summary %>%
 # Clean and harmonize feature and response names
 full_summary <- full_summary %>%
   mutate(
-    Feature = gsub("continent", "", Feature),
-    Feature = gsub("age_category", "", Feature),
-    Feature = gsub("Usage_high", "High Antibiotic Use", Feature),
-    Feature = gsub("sex_num_Men", "Woman", Feature),
+    Feature = gsub("^continent", "", Feature),
+    Feature = gsub("^age_category", "", Feature),
+    Feature = gsub("^genderWomen", "Woman", Feature),
+    Feature = gsub("^Usage_high1", "High Antibiotic Use", Feature),
+    Feature = gsub("([a-z])([A-Z])", "\\1 \\2", Feature),
     Feature = gsub("_", " ", Feature),
+    Feature = trimws(Feature),
     Feature = gsub("logreadcount", "log(read count)", Feature),
     Response = gsub("ARG_load", "ARG load", Response),
     Response = gsub("shannon_diversity", "Shannon", Response)
@@ -679,6 +684,7 @@ full_summary$Predictor <- factor(full_summary$Predictor,
     "High Antibiotic Use", "Woman", "Intercept"
   )
 )
+
 ```
 
 To explore potential differences between the models, we next visualize the estimated effects across predictors and income groups.
@@ -747,7 +753,7 @@ Where:
 
 Each model is fit independently for one of the four income–gender subgroups, making no assumptions of shared structure across them.
 
-Model fitting is computationally intensive and has been performed in a separate R script (`StratifiedModel.R`). Please ensure that this script is available in your working directory. The models have been saved as `.rds` files and are loaded here to enable downstream analysis.
+Model fitting is computationally intensive and has been performed in a separate R scripts (`StratifiedModelARG.R` and `StratifiedModelShannon.R`). Please ensure that this script is available in your working directory. The models have been saved as `.rds` files and are loaded here to enable downstream analysis.
 
 ```{r, include=FALSE}
 # Load models
@@ -765,7 +771,7 @@ We extract the posterior summaries (posterior means and 95% credible intervals) 
 
 ```{r}
 # Income and gender values
-incomes <- 0:1
+incomes <- c("LMIC", "HIC")
 genders <- c("Women", "Men")
 
 # Loop through responses and extract summaries
@@ -776,7 +782,7 @@ full_summary_age <- lapply(names(fit_list_age), function(response_name) {
   lapply(incomes, function(ic) {
     lapply(genders, function(g) {
       
-      fit <- fit_list[[paste0(ic, "_", g)]]
+      fit <- fit_list[[paste(ic, g, sep = "_")]]
       if (is.null(fit)) return(NULL)
       
       my_summary <- posterior_summary(fit) %>%
@@ -786,7 +792,7 @@ full_summary_age <- lapply(names(fit_list_age), function(response_name) {
         mutate(
           Feature = gsub("^b_", "", Feature),
           Response = response_label,
-          Income = ifelse(ic == 1, "HIC", "LMIC"),
+          Income = ic,
           Gender = ifelse(g == "Women", "Woman", "Man"),
           Significant = Q2.5 > 0 | Q97.5 < 0
         ) %>%
@@ -860,7 +866,6 @@ plot_age_effects <- full_summary_age %>%
 print(plot_age_effects)
 ```
 
-
 # Hierarchical Age Model by Income and Gender
 
 We use a hierarchical model that mirrors the structure of the data: income group → gender → age category. People are first grouped by income level, then by gender within each income group, and finally by age category. This setup lets the age effects differ between income and gender groups, making it easier to spot patterns that vary across these groups.
@@ -893,9 +898,9 @@ Where:
 
 -   $\sigma^2$ is the residual variance
 
-To reduce computation time and avoid convergence issues, the hierarchical models were fitted on a subset of the full dataset. Specifically, 20 observations were randomly selected from each combination of income group, gender, and age category, ensuring balanced representation across all demographic strata. 
+To reduce computation time and avoid convergence issues, the hierarchical models were fitted on a subset of the full dataset. Specifically, 20 observations were randomly selected from each combination of income group, gender, and age category, ensuring balanced representation across all demographic strata.
 
-Model fitting in this case is computationally intensive and has been performed in a separate R script (`HierarchicalModel.R`). Please ensure that this script is available in your working directory. The models have been saved as `.rds` files and are loaded here to enable downstream analysis.
+Model fitting in this case is computationally intensive and has been performed in a separate R scripts (`HierarchicalModelARG.R` and `HierarchicalModelShannon.R`). Please ensure that this script is available in your working directory. The models have been saved as `.rds` files and are loaded here to enable downstream analysis.
 
 ```{r, include=FALSE}
 # Load hierarchical models (age only)
@@ -953,14 +958,10 @@ full_summary_hier <- lapply(names(fit_list_hierarchical), function(name) {
 
 
 # Order predictors
-age_order <- c("Oldest Adult", "Older Adult", "Young Adult", "Teenager", "Children", "Toddler", "Infant")
-
-full_summary_hier$Predictor <- factor(full_summary_hier$Predictor, levels = age_order)
+full_summary_hier$Predictor <- factor(full_summary_hier$Predictor, levels = all_predictors)
 ```
 
-
 Next, we visualize the estimated effects from the hierarchical models.
-
 
 ```{r}
 # Plot
@@ -997,35 +998,31 @@ print(plot_hierarchical_age)
 
 This figure shows age-related effect estimates from a hierarchical model stratified by income group and gender. Because fitting the full model on the entire dataset was too computationally intensive, a random subset was used instead with a maximum of 20 observations per group. As a result, the model is not very stable, and some of the estimates appear unrealistically large with wide uncertainty intervals. The subset is not representative enough to support reliable inference. These results highlight the limitations of hierarchical modeling under small sample sizes, and emphasize the need for either simplified models or greater computational resources when using the full dataset.
 
-
-
-
 # Comparing Model Stability Under Small Samples: Probabilistic vs. Frequentist Approaches
 
 This section explores how probabilistic (Bayesian) and frequentist models behave under limited data conditions. The goal is to evaluate model robustness and stability when the available sample size is small.
 
 To achieve this, we repeatedly draw random subsamples of varying sizes from a larger dataset. For each subsample, we fit two models:
 
-- **A Bayesian model**, implemented with the brms package
+-   **A Bayesian model**, implemented with the brms package
 
-- **A frequentist linear model** using standard linear regression (lm())
+-   **A frequentist linear model** using standard linear regression (lm())
 
 We extract the effect estimates and the width of the 95% uncertainty intervals (credible intervals for Bayesian, confidence intervals for frequentist) for age category predictors. By comparing these across repetitions and sample sizes, we assess how each model handles uncertainty under constrained data scenarios.
 
 The comparison is performed for two outcome variables:
 
-1. ARG load (modeled using a lognormal likelihood)
+1.  ARG load (modeled using a lognormal likelihood)
 
-2. Shannon diversity index (modeled using a Gaussian likelihood)
+2.  Shannon diversity index (modeled using a Gaussian likelihood)
 
-Model fitting and repetitions are computationally intensive and have been performed in a separate R script (`FrequentistCompare.R`). Please ensure that this script is available in your working directory. The model outputs have been saved as `.rds` files and are loaded here for downstream analysis.
+Model fitting and repetitions are computationally intensive and have been performed in a separate R scripts (`FrequentistCompareARG.R` and `FrequentistCompareShannon.R`). Please ensure that this script is available in your working directory. The model outputs have been saved as `.rds` files and are loaded here for downstream analysis.
 
 ```{r, include=FALSE}
 # Load simulation results for both models
 results_ARG <- readRDS("results_compare_ARG.rds")
 results_shannon <- readRDS("results_compare_shannon.rds")
 ```
-
 
 ## Results: ARG load
 
@@ -1034,6 +1031,7 @@ The first analysis focuses on ARG load as the response variable, modeled using a
 ```{r}
 # Plot the distribution of 95% interval widths by model and sample size (ARG model)
 # Separate panels are shown for each age category
+results_ARG$Predictor[results_ARG$Predictor == "MiddleMAgedAdult"] <- "Middle-Aged Adult"
 ggplot(results_ARG, aes(x = factor(sample_size), y = width, fill = model)) +
   geom_boxplot(position = position_dodge(0.8), alpha = 0.85, linewidth = 0.6) +
   facet_wrap(~Predictor, scales = "free_y", ncol = 3) +
@@ -1066,16 +1064,14 @@ The boxplot illustrates the distribution of 95% interval widths for each age cat
 
 As the sample size increases, the two approaches converge toward similar interval widths. By n = 250–500, the differences between the models are minimal. These visual findings align with the numerical summaries and confirm that the Bayesian model provides more robust interval estimation under limited data conditions, especially for smaller or more variable subgroups.
 
-
-
 ## Results: Shannon Diversity
 
 The second analysis focuses on the Shannon diversity as the response variable, modeled using a Gaussian likelihood. The analysis follows the same simulation and modeling framework as with ARG load: five independent subsamples were drawn for each of the sample sizes (30, 80, 150, 250, 500), and both Bayesian and frequentist models were fitted to each. The aim is again to compare the estimated effects of age categories and evaluate the width and variability of the resulting 95% uncertainty intervals across varying sample sizes.
 
-
 ```{r}
 # Plot the distribution of 95% interval widths by model and sample size (Shannon model) 
 # Separate panels are shown for each age category
+results_shannon$Predictor[results_shannon$Predictor == "MiddleMAgedAdult"] <- "Middle-Aged Adult"
 ggplot(results_shannon, aes(x = factor(sample_size), y = width, fill = model)) +
   geom_boxplot(position = position_dodge(0.8), alpha = 0.85, linewidth = 0.6) +
   facet_wrap(~Predictor, scales = "free_y", ncol = 3) +
@@ -1108,5 +1104,822 @@ summary_table_shannon
 
 While the overall pattern for the Shannon diversity index is similar to that observed with ARG load, the convergence between the Bayesian and frequentist models appears to occur slightly faster. At smaller sample sizes (e.g., n = 30 and 80), the Bayesian intervals are again somewhat narrower and more stable, but the difference diminishes more quickly as the sample size increases. By n = 150, the average interval widths are already very close. This may reflect the more symmetric distribution of the Shannon index, which is modeled using a Gaussian likelihood rather than a lognormal distribution.
 
+# Enrichment model
+
+To investigate enrichment patterns in binary outcomes across discrete population groups, we used Bayesian regression models with a Bernoulli likelihood. This approach allows us to estimate the population frequency of a binary event such as the presence of a high ARG load across categories like age group or gender, instead of modeling continuous variation.
+
+By converting continuous outcomes into a binary form for example, defining the top 10% quantile as “high”, we can focus on the enrichment or overrepresentation of extreme values in specific subpopulations. This simple yet powerful framework helps identify disproportionate effects that may be masked when using standard Gaussian models.
+
+For each subgroup, we fit a model with the group variable as a predictor, enabling us to estimate the posterior prevalence and credible intervals for the binary outcome across categories. Enrichment model can be applied across different stratifications, such as by income level, gender, or age, to uncover patterns of enrichment in the population.
+
+Model fitting is computationally intensive and has been performed in a separate R scripts (`EnrichmentModels.R`). Please ensure that this script is available in your working directory.
+
+The resulting model objects are saved as .rds files for each model. These files are then loaded into this document to allow downstream summarization and visualization without re-running the computationally intensive model fitting.
+
+## Grouping by age cateogry and income group
+
+```{r, include=FALSE}
+# Load saved Bayesian model fits
+fit_enrichment_age <- readRDS("fit_enrichment_age.rds")
+# Load enrichment data
+enrichment_df <- readRDS("enrichment_df.rds")
+```
+
+We use a stratified Bayesian logistic regression model to estimate the prevalence of high ARG load across age categories. Separate models are fitted for each income group (LMIC, HIC). Age category is included as a categorical predictor, which estimates the difference between each age group.
+
+We use a Bernoulli likelihood to model the binary outcome:
+
+$$ 
+y_{ij} \sim \text{Bernoulli}(p_{ij}) 
+$$
+
+$$
+\text{logit}(p_{ij}) = \beta_{0j} + \sum_l \beta_{lj} \cdot \text{AgeCategory}_{ijl}
+$$
+
+Where:
+
+-   $y_{ij}$ is the binary outcome (high ARG load) for individual $i$ in income group $j$\
+-   $p_{ij}$ is the probability of high ARG load for individual $i$ in income group $j$\
+-   $\beta_{0j}$ is the intercept for income group $j$\
+-   $\beta_{lj}$ are the fixed effects for each age category $l$ in income group $j$\
+-   $\text{AgeCategory}_{ijl}$ is a dummy variable (1 if individual $i$ is in category $l$, 0 otherwise)
+
+We extract posterior summaries (posterior means and 95% credible intervals) of predicted outcome prevalence from each model. Specifically, we generate posterior predictions for each group, summarize these predictions across posterior draws, and compile the results into a combined summary table. This table includes the estimated prevalence, uncertainty intervals, and relevant grouping variables. To support clear visualization, we also clean and standardize column names and ensure that category ordering is consistent across plots.
+
+```{r}
+# Create posterior summary table using lapply
+summary_df <- lapply(names(fit_enrichment_age), function(ic) {
+  
+  # Create prediction data
+  newdata <- enrichment_df %>%
+    filter(income_group == ic) %>%
+    distinct(age_category) %>%
+    arrange(age_category)
+  
+  # Posterior expected prevalence
+  posterior_preds <- posterior_epred(fit_enrichment_age[[ic]], newdata = newdata)
+  
+  # Summarize posterior predictions
+  summary_ic <- as.data.frame(t(apply(posterior_preds, 2, function(x) {
+    c(Estimate = mean(x), Q2_5 = quantile(x, 0.025), Q97_5 = quantile(x, 0.975))
+  })))
+  
+  # Add metadata
+  summary_ic$age_category <- newdata$age_category
+  summary_ic$income_group <- ic
+  
+  return(summary_ic)
+  
+}) %>% bind_rows()
+
+# Clean column names
+colnames(summary_df)[1:3] <- c("Estimate", "Q2_5", "Q97_5")
+
+```
+
+Next, we can visualize the results.
+
+```{r}
+# Plot
+ggplot(summary_df, aes(x = age_category, y = Estimate * 100, color = income_group, group = income_group)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = Q2_5 * 100, ymax = Q97_5 * 100), width = 0.2) +
+  geom_line(linewidth = 0.5) +
+  geom_hline(yintercept = 10, linetype = "dashed", color = "gray40") +
+  facet_wrap(~ income_group, ncol = 1) +
+  scale_color_manual(values = c("LMIC" = "orange", "HIC" = "blue")) +
+  labs(
+    x = "Age Category",
+    y = "Estimated High ARG Prevalence (%)",
+    title = "High ARG Load Enrichment by Age Group and Income Level",
+    color = "Income Group"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  )
 
 
+```
+
+In both HIC and LMIC populations, infants show similarly high prevalence of high ARG load. In HICs, prevalence drops after infancy and then gradually rises again in older age groups. In contrast, LMICs show less of a drop after infancy and a much steeper increase in prevalence in later adulthood. This suggests that while both settings share a pattern of early-life elevation, the accumulation of ARG burden with age is much more pronounced in LMIC populations.
+
+## Grouping by gender and income group
+
+```{r, include=FALSE}
+# Load saved Bayesian model fits
+fit_enrichment_gender <- readRDS("fit_enrichment_gender.rds")
+```
+
+We use a stratified Bayesian logistic regression model to estimate the prevalence of high ARG load across gender groups. Separate models are fitted for each income group (LMIC, HIC). Gender is included as a categorical predictor, which estimates the difference between genders.
+
+We use a Bernoulli likelihood to model the binary outcome:
+
+$$ 
+y_{ij} \sim \text{Bernoulli}(p_{ij}) 
+$$
+
+$$
+\text{logit}(p_{ij}) = \beta_{0j} + \sum_m \beta_{mj} \cdot \text{Gender}_{ijm}
+$$
+
+Where:
+
+- $y_{ij}$ is the binary outcome (high ARG load) for individual $i$ in income group $j$  
+- $p_{ij}$ is the probability of high ARG load for individual $i$ in income group $j$  
+- $\beta_{0j}$ is the intercept for income group $j$  
+- $\beta_{mj}$ are the fixed effects for each gender $m$ in income group $j$  
+- $\text{Gender}_{ijm}$ is a dummy variable (1 if individual $i$ is in gender category $m$, 0 otherwise)
+
+We repeat the same procedure as above, extracting posterior means and 95% credible intervals of predicted prevalence, summarizing by group, and preparing the results for visualization.
+
+```{r}
+# Create posterior summary table using lapply
+summary_df <- lapply(names(fit_enrichment_gender), function(ic) {
+  
+  # Create prediction data
+  newdata <- enrichment_df %>%
+    filter(income_group == ic) %>%
+    distinct(gender) %>%
+    arrange(gender)
+  
+  # Posterior expected prevalence
+  posterior_preds <- posterior_epred(fit_enrichment_gender[[ic]], newdata = newdata)
+  
+  # Summarize posterior predictions
+  summary_ic <- as.data.frame(t(apply(posterior_preds, 2, function(x) {
+    c(Estimate = mean(x), Q2_5 = quantile(x, 0.025), Q97_5 = quantile(x, 0.975))
+  })))
+  
+  # Add metadata
+  summary_ic$gender <- newdata$gender
+  summary_ic$income_group <- ic
+  
+  return(summary_ic)
+  
+}) %>% bind_rows()
+
+# Clean column names
+colnames(summary_df)[1:3] <- c("Estimate", "Q2_5", "Q97_5")
+```
+
+Next, we visualize the results.
+
+```{r}
+# Plot
+ggplot(summary_df, aes(x = gender, y = Estimate * 100, color = income_group, group = income_group)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = Q2_5 * 100, ymax = Q97_5 * 100), width = 0.2) +
+  geom_line(linewidth = 0.5) +
+  geom_hline(yintercept = 10, linetype = "dashed", color = "gray40") +
+  facet_wrap(~ income_group, ncol = 1) +
+  scale_color_manual(values = c("LMIC" = "orange", "HIC" = "blue")) +
+  labs(
+    x = "Gender",
+    y = "Estimated High ARG Prevalence (%)",
+    title = "High ARG Load Enrichment by Gender and Income Level",
+    color = "Income Group"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  )
+
+```
+
+In both HIC and LMIC populations, women show slightly higher estimated prevalence of high ARG load compared to men, but the differences are not statistically significant, as the credible intervals overlap. The overall prevalence is somewhat lower in HICs and higher in LMICs, with greater uncertainty in the LMIC estimates.
+
+## Grouping by conitnent
+
+```{r, include=FALSE}
+# Load saved Bayesian model fit
+fit_enrichment_continent <- readRDS("fit_enrichment_continent.rds")
+```
+
+We use a Bayesian logistic regression model to estimate the prevalence of high ARG load across continents. A single model is fitted using all data, with continent included as a categorical predictor that estimates the difference between continents.
+
+We use a Bernoulli likelihood to model the binary outcome:
+
+$$ 
+y_i \sim \text{Bernoulli}(p_i) 
+$$
+
+$$
+\text{logit}(p_i) = \beta_0 + \sum_c \beta_c \cdot \text{Continent}_{ic}
+$$
+
+Where:
+
+- $y_i$ is the binary outcome (high ARG load) for individual $i$  
+- $p_i$ is the probability of high ARG load for individual $i$  
+- $\beta_0$ is the overall intercept  
+- $\beta_c$ are the fixed effects for each continent $c$  
+- $\text{Continent}_{ic}$ is a dummy variable (1 if individual $i$ is in continent $c$, 0 otherwise)
+
+We repeat the same procedure as above, extracting posterior means and 95% credible intervals of predicted prevalence, summarizing by group, and preparing the results for visualization.
+
+```{r}
+# Create posterior summary table
+summary_df <- {
+  # Get allowed levels from model data
+  allowed_levels <- levels(fit_enrichment_continent[["all"]]$data$continent)
+  
+  # Get prediction data and match factor levels
+  newdata <- enrichment_df %>%
+    distinct(continent) %>%
+    filter(continent %in% allowed_levels) %>%
+    arrange(continent)
+  
+  # Make sure continent is a factor with allowed levels
+  newdata$continent <- factor(newdata$continent, levels = allowed_levels)
+  
+  # Posterior expected prevalence
+  posterior_preds <- posterior_epred(fit_enrichment_continent[["all"]], newdata = newdata)
+  
+  # Summarize posterior predictions
+  summary_ic <- as.data.frame(t(apply(posterior_preds, 2, function(x) {
+    c(Estimate = mean(x), Q2_5 = quantile(x, 0.025), Q97_5 = quantile(x, 0.975))
+  })))
+  
+  # Add metadata
+  summary_ic$continent <- newdata$continent
+  
+  # Clean column names
+  colnames(summary_ic)[1:3] <- c("Estimate", "Q2_5", "Q97_5")
+  
+  summary_ic
+}
+```
+
+Next, we visualize the results.
+
+```{r}
+# Plot
+ggplot(summary_df, aes(x = continent, y = Estimate * 100)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = Q2_5 * 100, ymax = Q97_5 * 100), width = 0.2) +
+  geom_line(aes(group = 1), linewidth = 0.5) +
+  geom_hline(yintercept = 10, linetype = "dashed", color = "gray40") +
+  labs(
+    x = "Continent",
+    y = "Estimated High ARG Prevalence (%)",
+    title = "High ARG Load Enrichment by Continent"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold")
+  )
+
+```
+
+The estimated prevalence of high ARG load varies across continents. Asia and Europe show the highest estimates, with Asia having particularly wide uncertainty due to the small number of observations. North America shows intermediate levels, while Oceania has the lowest estimate.
+
+
+
+## Hierarchical enrichment model
+
+### Age catecory and income group
+
+```{r, include=FALSE}
+# Load saved hierarchical model
+fit_enrichment_age_hier <- readRDS("fit_enrichment_age_hier.rds")
+```
+
+
+We use a hierarchical Bayesian logistic regression model to estimate the prevalence of high ARG load across age categories, allowing the effects of age to vary across income groups. A single model is fitted using all data, with age category as a categorical predictor and random intercepts and slopes by income group.
+
+We use a Bernoulli likelihood to model the binary outcome:
+
+$$ 
+y_{ij} \sim \text{Bernoulli}(p_{ij}) 
+$$
+
+$$
+\text{logit}(p_{ij}) = \beta_0 + \sum_l \beta_l \cdot \text{AgeCategory}_{ijl} + b_{0j} + \sum_l b_{lj} \cdot \text{AgeCategory}_{ijl}
+$$
+
+Where:
+
+- $y_{ij}$ is the binary outcome (high ARG load) for individual $i$ in income group $j$  
+- $p_{ij}$ is the probability of high ARG load for individual $i$ in income group $j$  
+- $\beta_0$ is the overall intercept  
+- $\beta_l$ are the fixed effects for each age category $l$  
+- $b_{0j}$ is the random intercept for income group $j$  
+- $b_{lj}$ are the random slopes for age category $l$ within income group $j$  
+- $\text{AgeCategory}_{ijl}$ is a dummy variable (1 if individual $i$ is in age category $l$, 0 otherwise)
+
+We repeat the same procedure as above, extracting posterior means and 95% credible intervals of predicted prevalence, summarizing by group, and preparing the results for visualization.
+
+```{r}
+# Create prediction data across all income groups
+newdata <- enrichment_df %>%
+  distinct(age_category, income_group) %>%
+  arrange(income_group, age_category)
+
+# Make sure factors match model levels
+newdata$income_group <- factor(newdata$income_group, 
+                               levels = levels(fit_enrichment_age_hier[["all"]]$data$income_group))
+newdata$age_category <- factor(newdata$age_category, 
+                               levels = levels(fit_enrichment_age_hier[["all"]]$data$age_category))
+
+# Posterior expected prevalence
+posterior_preds <- posterior_epred(fit_enrichment_age_hier[["all"]], newdata = newdata)
+
+# Summarize posterior predictions
+summary_df <- as.data.frame(t(apply(posterior_preds, 2, function(x) {
+  c(Estimate = mean(x), Q2_5 = quantile(x, 0.025), Q97_5 = quantile(x, 0.975))
+})))
+
+# Add metadata
+summary_df$age_category <- newdata$age_category
+summary_df$income_group <- newdata$income_group
+
+# Clean column names
+colnames(summary_df)[1:3] <- c("Estimate", "Q2_5", "Q97_5")
+
+```
+
+
+Next we visualize the results.
+
+
+```{r}
+# Plot
+ggplot(summary_df, aes(x = age_category, y = Estimate * 100, color = income_group, group = income_group)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = Q2_5 * 100, ymax = Q97_5 * 100), width = 0.2) +
+  geom_line(linewidth = 0.5) +
+  geom_hline(yintercept = 10, linetype = "dashed", color = "gray40") +
+  facet_wrap(~ income_group, ncol = 1) +
+  scale_color_manual(values = c("LMIC" = "orange", "HIC" = "blue")) +
+  labs(
+    x = "Age Category",
+    y = "Estimated High ARG Prevalence (%)",
+    title = "High ARG Load Enrichment by Age Group and Income Level (Hierarchical Model)",
+    color = "Income Group"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  )
+
+```
+
+The hierarchical model produces results that are broadly consistent with the simpler stratified age-category model. The estimated patterns of high ARG prevalence across age groups and income levels remain similar, indicating that these enrichment patterns are robust to modeling approach.
+
+
+### Gender and income group
+
+
+```{r, include=FALSE}
+# Load saved hierarchical model
+fit_enrichment_gender_hier <- readRDS("fit_enrichment_gender_hier.rds")
+```
+
+We use a hierarchical Bayesian logistic regression model to estimate the prevalence of high ARG load across gender groups, allowing the effects of gender to vary across income groups. A single model is fitted using all data, with gender as a categorical predictor and random intercepts and slopes by income group.
+
+We use a Bernoulli likelihood to model the binary outcome:
+
+$$ 
+y_{ij} \sim \text{Bernoulli}(p_{ij}) 
+$$
+
+$$
+\text{logit}(p_{ij}) = \beta_0 + \sum_m \beta_m \cdot \text{Gender}_{ijm} + b_{0j} + \sum_m b_{mj} \cdot \text{Gender}_{ijm}
+$$
+
+Where:
+
+- $y_{ij}$ is the binary outcome (high ARG load) for individual $i$ in income group $j$  
+- $p_{ij}$ is the probability of high ARG load for individual $i$ in income group $j$  
+- $\beta_0$ is the overall intercept  
+- $\beta_m$ are the fixed effects for each gender $m$  
+- $b_{0j}$ is the random intercept for income group $j$  
+- $b_{mj}$ are the random slopes for gender $m$ within income group $j$  
+- $\text{Gender}_{ijm}$ is a dummy variable (1 if individual $i$ is in gender category $m$, 0 otherwise)
+
+We repeat the same procedure as above, extracting posterior means and 95% credible intervals of predicted prevalence, summarizing by group, and preparing the results for visualization.
+
+```{r}
+# Create prediction data across all income groups
+newdata <- enrichment_df %>%
+  distinct(gender, income_group) %>%
+  arrange(income_group, gender)
+
+# Make sure factors match model levels
+newdata$income_group <- factor(newdata$income_group, 
+                               levels = levels(fit_enrichment_gender_hier[["all"]]$data$income_group))
+newdata$gender <- factor(newdata$gender, 
+                         levels = 
+levels(fit_enrichment_gender_hier[["all"]]$data$gender))
+
+# Posterior expected prevalence
+posterior_preds <- posterior_epred(fit_enrichment_gender_hier[["all"]], newdata = newdata)
+
+# Summarize posterior predictions
+summary_df <- as.data.frame(t(apply(posterior_preds, 2, function(x) {
+  c(Estimate = mean(x), Q2_5 = quantile(x, 0.025), Q97_5 = quantile(x, 0.975))
+})))
+
+# Add metadata
+summary_df$gender <- newdata$gender
+summary_df$income_group <- newdata$income_group
+
+# Clean column names
+colnames(summary_df)[1:3] <- c("Estimate", "Q2_5", "Q97_5")
+```
+
+
+Next we visualize the results.
+
+```{r}
+# Plot
+ggplot(summary_df, aes(x = gender, y = Estimate * 100, color = income_group, group = income_group)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = Q2_5 * 100, ymax = Q97_5 * 100), width = 0.2) +
+  geom_line(linewidth = 0.5) +
+  geom_hline(yintercept = 10, linetype = "dashed", color = "gray40") +
+  facet_wrap(~ income_group, ncol = 1) +
+  scale_color_manual(values = c("LMIC" = "orange", "HIC" = "blue")) +
+  labs(
+    x = "Gender",
+    y = "Estimated High ARG Prevalence (%)",
+    title = "High ARG Load Enrichment by Gender and Income Level (Hierarchical Model)",
+    color = "Income Group"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold"),
+    legend.position = "none"
+  )
+```
+
+
+The hierarchical model produces patterns that are very similar to the original stratified gender model. The estimated high ARG load prevalence across gender and income levels shows consistent trends, suggesting that the main findings are robust regardless of whether a stratified or hierarchical modeling approach is used.
+
+
+
+
+### Gender, age category and income group
+
+```{r, include=FALSE}
+# Load saved hierarchical model
+fit_enrichment_age_gender_hier <- readRDS("fit_enrichment_age_gender_hier.rds")
+```
+
+We use a hierarchical Bayesian logistic regression model to estimate the prevalence of high ARG load across age categories, allowing the effects of age to vary across combinations of income group and gender. A single model is fitted using all data, with age category as a categorical predictor and random intercepts and slopes by income group and gender.
+
+We use a Bernoulli likelihood to model the binary outcome:
+
+$$ 
+y_{ijm} \sim \text{Bernoulli}(p_{ijm}) 
+$$
+
+$$
+\text{logit}(p_{ijm}) = \beta_0 + \sum_l \beta_l \cdot \text{AgeCategory}_{ijm l} + b_{0 j m} + \sum_l b_{l j m} \cdot \text{AgeCategory}_{ijm l}
+$$
+
+Where:
+
+- $y_{ijm}$ = binary outcome (high ARG load) for individual $i$ in income group $j$ and gender $m$  
+- $p_{ijm}$ = probability of high ARG load for individual $i$ in that group  
+- $\beta_0$ = overall intercept  
+- $\beta_l$ = fixed effects for each age category $l$  
+- $b_{0 j m}$ = random intercept for income group $j$ and gender $m$  
+- $b_{l j m}$ = random slope for age category $l$ within income group $j$ and gender $m$  
+- $\text{AgeCategory}_{ijm l}$ = dummy variable (1 if individual $i$ is in category $l$, 0 otherwise)
+
+We extract posterior summaries as before and prepare the results for visualization.
+
+```{r}
+# Create prediction data across all income and gender groups
+newdata <- enrichment_df %>%
+  distinct(age_category, income_group, gender) %>%
+  arrange(income_group, gender, age_category)
+
+# Make sure factors match model levels
+newdata$income_group <- factor(newdata$income_group, 
+                               levels = levels(fit_enrichment_age_gender_hier[["all"]]$data$income_group))
+newdata$gender <- factor(newdata$gender, 
+                         levels = levels(fit_enrichment_age_gender_hier[["all"]]$data$gender))
+newdata$age_category <- factor(newdata$age_category, 
+                               levels = levels(fit_enrichment_age_gender_hier[["all"]]$data$age_category))
+
+# Posterior expected prevalence
+posterior_preds <- posterior_epred(fit_enrichment_age_gender_hier[["all"]], newdata = newdata)
+
+# Summarize posterior predictions
+summary_df <- as.data.frame(t(apply(posterior_preds, 2, function(x) {
+  c(Estimate = mean(x), Q2_5 = quantile(x, 0.025), Q97_5 = quantile(x, 0.975))
+})))
+
+# Add metadata
+summary_df$age_category <- newdata$age_category
+summary_df$income_group <- newdata$income_group
+summary_df$gender <- newdata$gender
+
+# Clean column names
+colnames(summary_df)[1:3] <- c("Estimate", "Q2_5", "Q97_5")
+```
+
+Next we visualize the results.
+
+```{r, fig.width=14, fig.height=10}
+# Plot
+ggplot(summary_df, aes(x = age_category, y = Estimate * 100, color = gender, group = gender)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = Q2_5 * 100, ymax = Q97_5 * 100), width = 0.2) +
+  geom_line(linewidth = 0.5) +
+  facet_wrap(~ income_group, ncol = 1) +
+  scale_color_manual(values = c("Women" = "red", "Men" = "blue")) +
+  labs(
+    x = "Age Category",
+    y = "Estimated High ARG Prevalence (%)",
+    title = "High ARG Load Enrichment by Age, Gender, and Income Level (Hierarchical Model)",
+    color = "Gender"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold")
+  )
+```
+
+The hierarchical model with random slopes shows that age-related patterns vary across income groups, with a steeper increase in prevalence with age in LMICs, while HIC patterns remain relatively stable. Credible intervals mainly overlap across groups, indicating no clear differences between genders.
+
+
+### Continent and age category
+
+```{r, include=FALSE}
+# Load saved hierarchical model
+fit_enrichment_age_continent_hier <- readRDS("fit_enrichment_age_continent_hier.rds")
+```
+
+We use a hierarchical Bayesian logistic regression model to estimate the prevalence of high ARG load across age categories, allowing the effects of age to vary across continents. This model includes both random intercepts and random slopes for age category, providing flexibility to capture continent-specific age patterns.
+
+We use a Bernoulli likelihood to model the binary outcome:
+
+$$ 
+y_{i c} \sim \text{Bernoulli}(p_{i c}) 
+$$
+
+$$
+\text{logit}(p_{i c}) = \beta_0 + \sum_l \beta_l \cdot \text{AgeCategory}_{i c l} + b_{0 c} + \sum_l b_{l c} \cdot \text{AgeCategory}_{i c l}
+$$
+
+Where:
+
+- $y_{i c}$ = binary outcome (high ARG load) for individual $i$ in continent $c$  
+- $p_{i c}$ = probability of high ARG load for individual $i$ in that continent  
+- $\beta_0$ = overall intercept  
+- $\beta_l$ = fixed effects for each age category $l$  
+- $b_{0 c}$ = random intercept for continent $c$  
+- $b_{l c}$ = random slope for age category $l$ within continent $c$  
+- $\text{AgeCategory}_{i c l}$ = dummy variable (1 if individual $i$ is in age category $l$, 0 otherwise)
+
+We extract posterior summaries as before and prepare the results for visualization.
+
+```{r}
+# Create prediction data across all combinations
+newdata <- enrichment_df %>%
+  distinct(age_category, continent) %>%
+  arrange(continent, age_category)
+
+# Make sure factors match model levels
+newdata$continent <- factor(newdata$continent, 
+                            levels = levels(fit_enrichment_age_continent_hier[["all"]]$data$continent))
+newdata$age_category <- factor(newdata$age_category, 
+                               levels = levels(fit_enrichment_age_continent_hier[["all"]]$data$age_category))
+
+# Posterior expected prevalence
+posterior_preds <- posterior_epred(fit_enrichment_age_continent_hier[["all"]], newdata = newdata)
+
+# Summarize posterior predictions
+summary_df <- as.data.frame(t(apply(posterior_preds, 2, function(x) {
+  c(Estimate = mean(x), Q2_5 = quantile(x, 0.025), Q97_5 = quantile(x, 0.975))
+})))
+
+# Add metadata
+summary_df$age_category <- newdata$age_category
+summary_df$continent <- newdata$continent
+
+# Clean column names
+colnames(summary_df)[1:3] <- c("Estimate", "Q2_5", "Q97_5")
+```
+
+Next we visualize the results.
+
+```{r, fig.width=14, fig.height=10}
+# Plot
+ggplot(summary_df, aes(x = age_category, y = Estimate * 100, group = continent)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = Q2_5 * 100, ymax = Q97_5 * 100), width = 0.1) +
+  geom_line(linewidth = 0.6) +
+  facet_wrap(~ continent, ncol = 1) +
+  labs(
+    x = "Age Category",
+    y = "Estimated High ARG Prevalence (%)",
+    title = "High ARG Load Enrichment by Age and Continent (Hierarchical Model with Slopes)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold")
+  )
+```
+
+The figure shows continent-specific age patterns in estimated high ARG prevalence. Asia and Europe show higher prevalence levels, especially in younger age groups. 
+
+
+
+
+### Continent, gender, age category and income group (no slopes)
+
+```{r, include=FALSE}
+# Load saved hierarchical model
+fit_enrichment_income_age_gender_continent_hier <- readRDS("fit_enrichment_income_age_gender_continent_hier.rds")
+```
+
+We use a hierarchical Bayesian logistic regression model to estimate the prevalence of high ARG load across age categories, with random intercepts by continent, income group, and gender. This simplified model retains age category as a categorical predictor but includes only random intercepts (no random slopes), making the model faster to fit.
+
+We use a Bernoulli likelihood to model the binary outcome:
+
+$$ 
+y_{ijm c} \sim \text{Bernoulli}(p_{ijm c}) 
+$$
+
+$$
+\text{logit}(p_{ijm c}) = \beta_0 + \sum_l \beta_l \cdot \text{AgeCategory}_{ijm c l} + b_{0 j m c}
+$$
+
+Where:
+
+- $y_{ijm c}$ = binary outcome (high ARG load) for individual $i$ in income group $j$, gender $m$, continent $c$  
+- $p_{ijm c}$ = probability of high ARG load for individual $i$ in that group  
+- $\beta_0$ = overall intercept  
+- $\beta_l$ = fixed effects for each age category $l$  
+- $b_{0 j m c}$ = random intercept for income group $j$, gender $m$, continent $c$  
+- $\text{AgeCategory}_{ijm c l}$ = dummy variable (1 if individual $i$ is in age category $l$, 0 otherwise)
+
+We extract posterior summaries as before and prepare the results for visualization.
+
+```{r}
+# Create prediction data across all combinations
+newdata <- enrichment_df %>%
+  distinct(age_category, income_group, gender, continent) %>%
+  arrange(continent, income_group, gender, age_category)
+
+# Make sure factors match model levels
+newdata$continent <- factor(newdata$continent, 
+                            levels = levels(fit_enrichment_income_age_gender_continent_hier[["all"]]$data$continent))
+newdata$income_group <- factor(newdata$income_group, 
+                               levels = levels(fit_enrichment_income_age_gender_continent_hier[["all"]]$data$income_group))
+newdata$gender <- factor(newdata$gender, 
+                         levels = levels(fit_enrichment_income_age_gender_continent_hier[["all"]]$data$gender))
+newdata$age_category <- factor(newdata$age_category, 
+                               levels = levels(fit_enrichment_income_age_gender_continent_hier[["all"]]$data$age_category))
+
+# Posterior expected prevalence
+posterior_preds <- posterior_epred(fit_enrichment_income_age_gender_continent_hier[["all"]], newdata = newdata)
+
+# Summarize posterior predictions
+summary_df <- as.data.frame(t(apply(posterior_preds, 2, function(x) {
+  c(Estimate = mean(x), Q2_5 = quantile(x, 0.025), Q97_5 = quantile(x, 0.975))
+})))
+
+# Add metadata
+summary_df$age_category <- newdata$age_category
+summary_df$income_group <- newdata$income_group
+summary_df$gender <- newdata$gender
+summary_df$continent <- newdata$continent
+
+# Clean column names
+colnames(summary_df)[1:3] <- c("Estimate", "Q2_5", "Q97_5")
+```
+
+Next we visualize the results.
+
+```{r, fig.width=14, fig.height=10}
+# Plot
+ggplot(summary_df, aes(x = age_category, y = Estimate * 100, color = gender, group = gender)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = Q2_5 * 100, ymax = Q97_5 * 100), width = 0.2) +
+  geom_line(linewidth = 0.5) +
+  facet_grid(continent ~ income_group) +
+  scale_color_manual(values = c("Women" = "red", "Men" = "blue")) +
+  labs(
+    x = "Age Category",
+    y = "Estimated High ARG Prevalence (%)",
+    title = "High ARG Load Enrichment by Age, Gender, Income Level, and Continent (Hierarchical Model, Intercepts Only)",
+    color = "Gender"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold")
+  )
+```
+
+The intercept-only model shows fairly parallel age trends across gender, income group, and continent, with women slightly higher on average but overlapping credible intervals. Next, we will fit a model with random slopes to explore whether age effects differ more strongly between groups.
+
+
+
+
+### Continent, income group, gender, and age (with slopes)
+
+```{r, include=FALSE}
+# Load saved hierarchical model
+fit_enrichment_all_hier <- readRDS("fit_enrichment_all_hier.rds")
+```
+
+We use a hierarchical Bayesian logistic regression model to estimate the prevalence of high ARG load across age categories, allowing the effects of age to vary across combinations of continent, income group, and gender. This extended model includes both random intercepts and random slopes for age category, providing maximum flexibility to capture group-specific age patterns.
+
+We use a Bernoulli likelihood to model the binary outcome:
+
+$$ 
+y_{ijmc} \sim \text{Bernoulli}(p_{ijmc}) 
+$$
+
+$$
+\text{logit}(p_{ijmc}) = \beta_0 + \sum_l \beta_l \cdot \text{AgeCategory}_{ijmcl} + b_{0jmc} + \sum_l b_{ljmc} \cdot \text{AgeCategory}_{ijmcl}
+$$
+
+Where:
+
+- $y_{ijmc}$ = binary outcome (high ARG load) for individual $i$ in income group $j$, gender $m$, continent $c$  
+- $p_{ijmc}$ = probability of high ARG load for individual $i$ in that group  
+- $\beta_0$ = overall intercept  
+- $\beta_l$ = fixed effects for each age category $l$  
+- $b_{0jmc}$ = random intercept for income group $j$, gender $m$, continent $c$  
+- $b_{ljmc}$ = random slope for age category $l$ within income group $j$, gender $m$, continent $c$  
+- $\text{AgeCategory}_{ijmcl}$ = dummy variable (1 if individual $i$ is in age category $l$, 0 otherwise)
+
+We extract posterior summaries as before and prepare the results for visualization.
+
+```{r}
+# Create prediction data across all combinations
+newdata <- enrichment_df %>%
+  distinct(age_category, income_group, gender, continent) %>%
+  arrange(continent, income_group, gender, age_category)
+
+# Ensure factors match model levels
+newdata$continent <- factor(newdata$continent, 
+                            levels = levels(fit_enrichment_all_hier[["all"]]$data$continent))
+newdata$income_group <- factor(newdata$income_group, 
+                               levels = levels(fit_enrichment_all_hier[["all"]]$data$income_group))
+newdata$gender <- factor(newdata$gender, 
+                         levels = levels(fit_enrichment_all_hier[["all"]]$data$gender))
+newdata$age_category <- factor(newdata$age_category, 
+                               levels = levels(fit_enrichment_all_hier[["all"]]$data$age_category))
+
+# Posterior expected prevalence
+posterior_preds <- posterior_epred(fit_enrichment_all_hier[["all"]], newdata = newdata)
+
+# Summarize posterior predictions
+summary_df <- as.data.frame(t(apply(posterior_preds, 2, function(x) {
+  c(Estimate = mean(x), Q2_5 = quantile(x, 0.025), Q97_5 = quantile(x, 0.975))
+})))
+
+# Add metadata
+summary_df$age_category <- newdata$age_category
+summary_df$income_group <- newdata$income_group
+summary_df$gender <- newdata$gender
+summary_df$continent <- newdata$continent
+
+# Clean column names
+colnames(summary_df)[1:3] <- c("Estimate", "Q2_5", "Q97_5")
+```
+
+Next we visualize the results.
+
+```{r, fig.width=14, fig.height=10}
+# Plot
+ggplot(summary_df, aes(x = age_category, y = Estimate * 100, color = gender, group = gender)) +
+  geom_point(size = 1.5) +
+  geom_errorbar(aes(ymin = Q2_5 * 100, ymax = Q97_5 * 100), width = 0.1) +
+  geom_line(linewidth = 0.6) +
+  facet_grid(continent ~ income_group) +
+  scale_color_manual(values = c("Women" = "red", "Men" = "blue")) +
+  labs(
+    x = "Age Category",
+    y = "Estimated High ARG Prevalence (%)",
+    title = "High ARG Load Enrichment by Age, Gender, Income Level, and Continent (Hierarchical Model with Slopes)",
+    color = "Gender"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold")
+  )
+```
+
+The random slope model reveals variation in age trends across gender, income group, and continent. While credible intervals remain wide, especially in LMICs and some continents, overall patterns do not show pronounced gender differences.

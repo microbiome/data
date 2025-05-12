@@ -1,8 +1,8 @@
-28.3.2025
+5.5.2025
 
 # Gender Differences in Global Antimicrobial Resistance
 
-This repository contains a cleaned demo dataset (`tse_AMRdemo.rds`) and supporting code used in the analysis of gender-related differences in global antimicrobial resistance (AMR), as illustrated in Figure 5 of the manuscript.
+This repository contains a cleaned demo dataset (`tse_AMRdemo.rds`) and supporting code used in the analysis of gender-related differences in global antimicrobial resistance (AMR).
 
 ## Study Information
 
@@ -22,19 +22,23 @@ This repository contains a cleaned demo dataset (`tse_AMRdemo.rds`) and supporti
 
 -   `model.R` – Runs the Bayesian models for the manuscript (slow, runs brms).
 
--   `ComparisonModels.R` – Comparison of log-normal and log-transformed normal models.
+-   `ComparisonModelLognormal.R` and `ComparisonModelGaussian.R` – Comparison of log-normal and log-transformed normal models.
 
--   `StratifiedModel.R` – Stratified model fitting by subgroups such as age and gender.
+-   `StratifiedModelARG.R` and `StratifiedModelShannon.R` – Stratified model fitting by subgroups such as age and gender.
 
--   `HierarchicalModel.R` – Hierarchical model with nested random effects.
+-   `HierarchicalModelARG.R` and `HierarchicalModelShannon.R` – Hierarchical model with nested random effects.
 
--   `FrequentistCompare.R` – Simulation-based comparison of Bayesian and frequentist models for ARG and Shannon.
+-   `FrequentistCompareARG.R` and `FrequentistCompareShannon.R` – Simulation-based comparison of Bayesian and frequentist models for ARG and Shannon.
 
--   `report.qmd` – Quarto document that loads precomputed model results and generates Figure 5.
+-   `EnrichmentModels.R`  – runs enrichment models using Bayesian regression to estimate high ARG prevalence across groups
+
+-   `report.qmd` – Quarto document that loads precomputed model results and generates results.
 
 -    `main.R` – Wrapper script to execute all of the above in correct order.
 
-## How to Use and Reproduce Figure 5
+-    All fitted models and simulation results are saved as `.rds` files to avoid repeated computation.
+
+## How to Use and Reproduce the report
 
 To load the dataset in R:
 
@@ -54,17 +58,30 @@ To reproduce the analysis and generate Figure 5 from the manuscript:
     - `data.R`
     - `funcs.R`
     - `model.R`
-    - `ComparisonModels.R`
-    - `StratifiedModel.R`
-    - `HierarchicalModel.R`
-    - `FrequentistCompare.R`
+    - `ComparisonModelLognormal.R`
+    - `ComparisonModelGaussian.R`
+    - `StratifiedModelARG.R`
+    - `StratifiedModelShannon.R`
+    - `HierarchicalModelARG.R`
+    - `HierarchicalModelShannon.R`
+    - `FrequentistCompareARG.R`
+    - `FrequentistCompareShannon.R`
+    - `EnrichmentModels.R`
     - `report.qmd`
     - `main.R`
 
 2.  Open R or RStudio in the same directory where these files are located.
 
-3. Run the following line in your R console to execute all required preprocessing and modeling steps:
+3. If you want to re-run the full analysis from scratch (including model fitting), run:
 
 ```r
 source("main.R")
+```
+
+**Tip:** If you do not want to re-fit the models, you can skip the long-running computations by downloading all `.rds` result files from the repository, and then running just the following:
+
+```r
+source("data.R")
+source("funcs.R")
+quarto::quarto_render("report.qmd")
 ```

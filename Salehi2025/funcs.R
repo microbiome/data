@@ -16,3 +16,12 @@ get_stars_CI_log <- function(lower, upper) {
 get_stars_CI <- function(lower, upper) {
   ifelse(lower > 0 | upper < 0, "*", "ns")
 }
+
+# Standardize age labels
+standardize_age <- function(x) {
+  recode(x,
+         "YoungAdult" = "Young Adult",
+         "OlderAdult" = "Older Adult",
+         "OldestAdult" = "Oldest Adult",
+         .default = x)
+}

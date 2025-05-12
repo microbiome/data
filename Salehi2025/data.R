@@ -193,6 +193,9 @@ subset_data <- as.data.frame(adult_metadata) %>%
 # Set "Middle-Aged Adult" as the reference category for age
 subset_data$age_category <- relevel(factor(subset_data$age_category), ref = "Middle-Aged Adult")
 
+# Create a readable categorical variable for income group (HIC vs. LMIC)
+subset_data <- subset_data %>%
+  mutate(income_group = if_else(income_group_HIC == 1, "HIC", "LMIC"))
 
 # Create base data frame for modeling and set "Middle-Aged Adult" as the reference category for age
 adult_df <- as.data.frame(adult_metadata) %>%
@@ -207,3 +210,44 @@ adult_df <- as.data.frame(adult_metadata) %>%
 # Create a readable categorical variable for income group (HIC vs. LMIC)
 adult_df <- adult_df %>%
   mutate(income_group = if_else(income_group_HIC == 1, "HIC", "LMIC"))
+
+# LMIC group: continent base level Asia
+adult_df_LMIC <- adult_df %>%
+  filter(income_group == "LMIC") %>%
+  mutate(
+    continent = relevel(factor(continent), ref = "Asia"),
+    age_category = relevel(factor(age_category), ref = "Middle-Aged Adult"),
+    gender = relevel(factor(gender), ref = "Men"),
+    Usage_high = factor(Usage_high)
+  )
+
+# HIC group: continent base level Europe
+adult_df_HIC <- adult_df %>%
+  filter(income_group == "HIC") %>%
+  mutate(
+    continent = relevel(factor(continent), ref = "Europe"),
+    age_category = relevel(factor(age_category), ref = "Middle-Aged Adult"),
+    gender = relevel(factor(gender), ref = "Men"),
+    Usage_high = factor(Usage_high)
+  )
+
+
+# Data for enrichment model
+enrichment_df <- as.data.frame(adult_metadata) %>%
+  mutate(
+    age_category = factor(age_category,
+                          levels = c("Infant", "Toddler", "Children", "Teenager",
+                                     "Young Adult", "Middle-Aged Adult",
+                                     "Older Adult", "Oldest Adult")),
+    income_group = if_else(income_group_HIC == 1, "HIC", "LMIC"))
+
+# Create binary variable for high ARG load (top 10% threshold)
+threshold <- quantile(enrichment_df$ARG_load, probs = 0.90, na.rm = TRUE)
+
+# Data for enrichment models
+enrichment_df <- enrichment_df %>%
+  mutate(high_ARG = ifelse(ARG_load > threshold, 1, 0))
+
+enrichment_df$income_group <- factor(enrichment_df$income_group)
+saveRDS(enrichment_df, "enrichment_df.rds")
+

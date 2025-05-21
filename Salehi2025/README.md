@@ -1,4 +1,4 @@
-20.5.2025
+21.5.2025
 
 # Gender Differences in Global Antimicrobial Resistance
 
@@ -10,7 +10,12 @@ This repository contains a cleaned demo dataset (`tse_AMRdemo.rds`) and supporti
 
 -   Authors: Mahkameh Salehi, Ville Laitinen, Shivang Bhanushali, Johan Bengtsson-Palme, Peter Collignon, John J Beggs, Katariina Pärnänen, Leo Lahti
 
--   DOI: <https://doi.org/10.5281/zenodo.14909582>
+-   DOI (Zenodo): <https://doi.org/10.5281/zenodo.14909582>
+
+### Reference
+
+Salehi, M., Laitinen, V., Bhanushali, S. *et al.* (2025). *Gender differences in global antimicrobial resistance*. *npj Biofilms and Microbiomes, 11*, 79.  
+[https://doi.org/10.1038/s41522-025-00715-9](https://doi.org/10.1038/s41522-025-00715-9)
 
 ## Contents
 
